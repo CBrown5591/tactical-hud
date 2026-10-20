@@ -1,6 +1,6 @@
 window.HUD_CONFIG = {
   "apiKey": "b7b2993987534f906358046ce7eea62e",
-  "token": "YATTAc556c8cbe908fca402d7e76a770daea73bb6401534a52baaa9d257029ddbddbb2E787AD8",
+  "token": "ATTAc556c8cbe908fca402d7e76a770daea73bb6401534a52baaa9d257029ddbddbb2E787AD8",
   "workHours": { "start": 8.5, "end": 17.0 },
   "boards": {
     "work": "6ad7753ef2d7a4b5a376d19a",
