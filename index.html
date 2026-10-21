@@ -6,7 +6,6 @@
   <meta name="theme-color" content="#0b0f19" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="manifest" href="manifest.json">
   <title>Tactical Focus HUD</title>
   <style>
     :root {
@@ -134,6 +133,16 @@
       border-radius: 8px; padding: 8px 10px; font-size: 0.82rem;
     }
     .empty-state { font-size: 0.8rem; color: var(--muted); padding: 14px 4px; text-align: center; }
+  
+    /* Card Notes */
+    .task-notes-preview {
+      margin-top: 6px; font-size: 0.72rem; color: #94a3b8; background: #0b1120;
+      padding: 4px 8px; border-radius: 4px; border-left: 2px solid var(--accent);
+      cursor: pointer; line-height: 1.3; max-height: 48px; overflow: hidden;
+      text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .task-notes-preview:hover { color: #f8fafc; border-left-color: #fff; }
+
   </style>
   <!-- Optional auto-loaded config file -->
   <script src="config.js" onerror="console.log('No external config.js found. Using localStorage config.');"></script>
@@ -147,6 +156,7 @@
       <span id="modeTitle">🏢 AMTRAK OIG HUD</span>
     </div>
     <div class="controls">
+      <button class="btn" id="reportBtn" title="Generate Amtrak OIG Briefing" onclick="openReportModal()">📊 Report</button>
       <button class="btn" id="toggleContextBtn" onclick="toggleManualContext()">Switch Mode</button>
       <button class="btn" onclick="syncHud()">↻</button>
       <button class="btn" onclick="openSettings()">⚙️</button>
@@ -204,7 +214,7 @@
     <!-- TODAY'S LOAD (WIP LIMIT 4) -->
     <section class="panel">
       <div class="section-label">
-        <span>⚡ TODAY'S LOAD (1 HEAVY / 3 LIGHT)</span>
+        <span>⚡ TODAY'S LOAD (1 HEAVY / 1 MED / 2 LIGHT)</span>
         <span class="wip-counter" id="todayCount">0 / 4</span>
       </div>
       <div class="task-list" id="todayList">
@@ -223,6 +233,38 @@
       </div>
     </section>
   </main>
+
+    <!-- CARD NOTE MODAL -->
+  <div class="modal-backdrop" id="cardNoteModal">
+    <div class="modal">
+      <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">📝 Card Notes</h2>
+      <div class="field">
+        <textarea id="cardNoteInput" rows="6" placeholder="Add scratchpad notes, meeting takeaways, links, or next steps..."></textarea>
+      </div>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
+        <button class="btn" onclick="closeNoteModal()">Cancel</button>
+        <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">Save Note</button>
+      </div>
+    </div>
+  </div>
+
+    <!-- AMTRAK OIG REPORT MODAL -->
+  <div class="modal-backdrop" id="reportModal">
+    <div class="modal" style="max-width: 600px;">
+      <h2 style="font-size:1.05rem; margin-bottom:6px;">📊 Amtrak OIG Status Briefing</h2>
+      <p style="font-size:0.75rem; color:var(--muted); margin-bottom:10px;">Summary of Completed and Waiting tasks with full scratchpad notes.</p>
+      <div class="field">
+        <textarea id="reportContent" rows="12" style="font-family: monospace; font-size:0.78rem; line-height:1.4;" readonly></textarea>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; flex-wrap:wrap; gap:8px;">
+        <button class="btn" onclick="copyReportText()">📋 Copy Briefing</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="closeReportModal()">Close</button>
+          <button class="btn btn-primary" onclick="emailReport()">📧 Send via Email</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <!-- SETTINGS / CONFIG MODAL -->
   <div class="modal-backdrop" id="settingsModal">
@@ -266,6 +308,7 @@
     captureBoard: "life",
     captureEnergy: "none",
     saveStateCardId: null,
+    activeNoteCard: null,
     boardCache: {},
     todayCards: [],
     inboxCards: []
@@ -348,7 +391,7 @@
   async function fetchBoardData(boardKey, boardId) {
     const [lists, cards, labels] = await Promise.all([
       trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
-      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc"),
+      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos"),
       trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
     ]);
     const listMap = {};
@@ -363,6 +406,65 @@
     labels.forEach(lb => { if (lb.color) labelMap[lb.color] = lb.id; });
     state.boardCache[boardKey] = { boardId, listMap, labelMap };
     return { boardKey, listMap, cards };
+  }
+
+      async function autoPromoteCards(results) {
+    let promotedAny = false;
+    for (const { boardKey, listMap, cards } of results) {
+      if (!listMap.today || !listMap.queue) continue;
+
+      const todayCards = cards.filter(c => c.idList === listMap.today && !c.name.startsWith("🎯"));
+      const queueCards = cards.filter(c => c.idList === listMap.queue);
+
+      const counts = { red: 0, yellow: 0, green: 0 };
+      todayCards.forEach(c => {
+        const col = (c.labels && c.labels[0]) ? c.labels[0].color : "none";
+        if (counts[col] !== undefined) counts[col]++;
+      });
+
+      const slots = {
+        red: Math.max(0, 1 - counts.red),
+        yellow: Math.max(0, 1 - counts.yellow),
+        green: Math.max(0, 2 - counts.green)
+      };
+
+      let totalSlots = slots.red + slots.yellow + slots.green;
+      if (totalSlots === 0 || queueCards.length === 0) continue;
+
+      // Sort queue cards:
+      // 1. Due Date: Cards with due date come first, sorted ascending (soonest due date first).
+      // 2. FIFO: Tie-breaker / cards without due dates sort by creation timestamp (oldest first).
+      // Note: Trello card IDs are 24-char BSON ObjectIDs where the first 8 hex chars represent creation epoch seconds.
+      const sortedQueue = [...queueCards].sort((a, b) => {
+        const dueA = a.due ? new Date(a.due).getTime() : Infinity;
+        const dueB = b.due ? new Date(b.due).getTime() : Infinity;
+
+        if (dueA !== dueB) {
+          return dueA - dueB; // Earlier due date comes first
+        }
+
+        const createdAtA = parseInt(a.id.substring(0, 8), 16);
+        const createdAtB = parseInt(b.id.substring(0, 8), 16);
+        return createdAtA - createdAtB; // Oldest created card comes first (FIFO)
+      });
+
+      for (const card of sortedQueue) {
+        if (totalSlots === 0) break;
+        const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+        if (slots[col] && slots[col] > 0) {
+          try {
+            await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.today}`);
+            card.idList = listMap.today;
+            slots[col]--;
+            totalSlots--;
+            promotedAny = true;
+          } catch (e) {
+            console.error("Auto-promote failed for card:", card.id, e);
+          }
+        }
+      }
+    }
+    return promotedAny;
   }
 
   async function syncHud() {
@@ -381,6 +483,10 @@
 
     try {
       const results = await Promise.all(validTargets.map(k => fetchBoardData(k, cfg.boards[k])));
+      
+      // Auto-promote queue cards into open energy slots (1 Heavy / 1 Med / 2 Light)
+      await autoPromoteCards(results);
+
       state.todayCards = [];
       state.inboxCards = [];
       state.saveStateCardId = null;
@@ -398,6 +504,7 @@
           const item = {
             id: card.id,
             name: card.name,
+            desc: card.desc || "",
             boardKey,
             boardName: BOARD_LABELS[boardKey],
             energy: energyColor
@@ -429,12 +536,18 @@
     todayFiltered.forEach(c => {
       const el = document.createElement("div");
       el.className = `task-card energy-${c.energy}`;
+      const noteSnippet = c.desc
+        ? `<div class="task-notes-preview" title="Edit Note" onclick="openNoteModal('${c.id}','${c.boardKey}')">📝 ${escapeHtml(c.desc)}</div>`
+        : "";
+
       el.innerHTML = `
         <div class="task-info">
           <div class="task-title">${escapeHtml(c.name)}</div>
           <div class="task-meta"><span class="board-tag">${c.boardName}</span></div>
+          ${noteSnippet}
         </div>
         <div class="task-actions">
+          <button class="icon-btn" title="Edit Note" onclick="openNoteModal('${c.id}','${c.boardKey}')">📝</button>
           <button class="icon-btn" title="Move to Waiting" onclick="moveCard('${c.id}','${c.boardKey}','waiting')">⏳</button>
           <button class="icon-btn done" title="Complete Task" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
         </div>
@@ -495,6 +608,132 @@
     syncHud();
   }
 
+    function openNoteModal(cardId, boardKey) {
+    const card = state.todayCards.find(c => c.id === cardId);
+    if (!card) return;
+    state.activeNoteCard = { id: cardId, boardKey };
+    document.getElementById("noteModalCardTitle").textContent = `📝 Notes: ${card.name}`;
+    document.getElementById("cardNoteInput").value = card.desc || "";
+    document.getElementById("cardNoteModal").classList.add("open");
+  }
+
+  function closeNoteModal() {
+    document.getElementById("cardNoteModal").classList.remove("open");
+    state.activeNoteCard = null;
+  }
+
+  async function saveCardNote() {
+    if (!state.activeNoteCard) return;
+    const { id, boardKey } = state.activeNoteCard;
+    const noteText = document.getElementById("cardNoteInput").value.trim();
+    const saveBtn = document.getElementById("saveNoteBtn");
+    saveBtn.textContent = "Saving...";
+    try {
+      await trelloFetch(`/cards/${id}`, "PUT", `&desc=${encodeURIComponent(noteText)}`);
+      // Update local cache & state
+      const target = state.todayCards.find(c => c.id === id);
+      if (target) target.desc = noteText;
+      closeNoteModal();
+      renderCards();
+    } catch (e) {
+      alert("Failed to save note to Trello.");
+    } finally {
+      saveBtn.textContent = "Save Note";
+    }
+  }
+
+    async function openReportModal() {
+    const cfg = loadConfig();
+    const workBoardId = (cfg && cfg.boards && cfg.boards.work);
+    if (!workBoardId) {
+      alert("Amtrak OIG Board ID is not configured.");
+      return;
+    }
+
+    const modal = document.getElementById("reportModal");
+    const contentBox = document.getElementById("reportContent");
+    contentBox.value = "Fetching Amtrak OIG board data and compiling report...";
+    modal.classList.add("open");
+
+    try {
+      const [lists, cards] = await Promise.all([
+        trelloFetch(`/boards/${workBoardId}/lists`, "GET", "&fields=name,id"),
+        trelloFetch(`/boards/${workBoardId}/cards`, "GET", "&fields=name,id,idList,desc,dateLastActivity,labels")
+      ]);
+
+      const doneListIds = lists.filter(l => l.name.toLowerCase().includes("done")).map(l => l.id);
+      const waitingListIds = lists.filter(l => l.name.toLowerCase().includes("waiting")).map(l => l.id);
+
+      const doneCards = cards.filter(c => doneListIds.includes(c.idList) && !c.name.startsWith("🎯"));
+      const waitingCards = cards.filter(c => waitingListIds.includes(c.idList) && !c.name.startsWith("🎯"));
+
+      const todayStr = new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+
+      let report = `=========================================\n`;
+      report += `🏢 AMTRAK OIG STATUS REPORT\n`;
+      report += `Date: ${todayStr}\n`;
+      report += `=========================================\n\n`;
+
+      report += `✅ COMPLETED TASKS (${doneCards.length})\n`;
+      report += `-----------------------------------------\n`;
+      if (doneCards.length === 0) {
+        report += `(No cards currently in Done)\n`;
+      } else {
+        doneCards.forEach(c => {
+          report += `• ${c.name}\n`;
+          if (c.desc && c.desc.trim()) {
+            report += `  Notes: ${c.desc.trim().replace(/\n/g, "\n  ")}\n`;
+          }
+          report += `\n`;
+        });
+      }
+
+      report += `⏳ WAITING / BLOCKED TASKS (${waitingCards.length})\n`;
+      report += `-----------------------------------------\n`;
+      if (waitingCards.length === 0) {
+        report += `(No cards currently in Waiting)\n`;
+      } else {
+        waitingCards.forEach(c => {
+          report += `• ${c.name}\n`;
+          if (c.desc && c.desc.trim()) {
+            report += `  Notes: ${c.desc.trim().replace(/\n/g, "\n  ")}\n`;
+          }
+          report += `\n`;
+        });
+      }
+
+      report += `=========================================\n`;
+      report += `Generated via Tactical Focus HUD\n`;
+
+      contentBox.value = report;
+    } catch (e) {
+      console.error(e);
+      contentBox.value = "Error generating report: " + (e.message || "Failed to communicate with Trello API.");
+    }
+  }
+
+  function closeReportModal() {
+    document.getElementById("reportModal").classList.remove("open");
+  }
+
+  function copyReportText() {
+    const text = document.getElementById("reportContent").value;
+    navigator.clipboard.writeText(text).then(() => {
+      alert("Briefing copied to clipboard!");
+    }).catch(() => {
+      alert("Unable to copy. You can manually select and copy the text.");
+    });
+  }
+
+  function emailReport() {
+    const report = document.getElementById("reportContent").value;
+    const recipient = (window.HUD_CONFIG && window.HUD_CONFIG.reportEmail) || "charlesabrown0505@gmail.com";
+    const dateStr = new Date().toISOString().split("T")[0];
+    const subject = encodeURIComponent(`Amtrak OIG Status Report - ${dateStr}`);
+    const body = encodeURIComponent(report);
+    window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+  }
+
   function openSettings() {
     const cfg = loadConfig() || { boards: {} };
     document.getElementById("cfgApiKey").value = cfg.apiKey || "";
@@ -544,11 +783,6 @@
   }
 
   window.addEventListener("DOMContentLoaded", syncHud);
-</script>
-<script>
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js");
-  }
 </script>
 </body>
 </html>
