@@ -421,12 +421,24 @@
     ]);
     const listMap = {};
     lists.forEach(l => {
-      if (l.name.includes("Inbox")) listMap.inbox = l.id;
-      else if (l.name.includes("Today")) listMap.today = l.id;
-      else if (l.name.includes("Waiting")) listMap.waiting = l.id;
-      else if (l.name.includes("Queue")) listMap.queue = l.id;
-      else if (l.name.includes("Done")) listMap.done = l.id;
+      const name = (l.name || "").toLowerCase().trim();
+      if (name.includes("inbox") || name.includes("triage") || name.includes("incoming") || name.includes("capture")) {
+        listMap.inbox = l.id;
+      } else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress")) {
+        listMap.today = l.id;
+      } else if (name.includes("waiting") || name.includes("blocked") || name.includes("pending") || name.includes("hold")) {
+        listMap.waiting = l.id;
+      } else if (name.includes("queue") || name.includes("backlog") || name.includes("next")) {
+        listMap.queue = l.id;
+      } else if (name.includes("done") || name.includes("complete") || name.includes("archive")) {
+        listMap.done = l.id;
+      }
     });
+
+    // Fallbacks: If list names did not match exact keywords, fallback intelligently so operations never freeze
+    if (!listMap.inbox && lists.length > 0) listMap.inbox = lists[0].id; // 1st list is default Inbox
+    if (!listMap.today && lists.length > 1) listMap.today = lists[1].id;
+
     const labelMap = {};
     labels.forEach(lb => { if (lb.color) labelMap[lb.color] = lb.id; });
     state.boardCache[boardKey] = { boardId, listMap, labelMap };
