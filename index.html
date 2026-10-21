@@ -146,11 +146,47 @@
     }
     .task-notes-preview:hover { color: #f8fafc; border-left-color: #fff; }
 
+  
+    /* Lock Screen Overlay */
+    .lock-overlay {
+      position: fixed; inset: 0; background: #070a12; z-index: 100;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; text-align: center;
+    }
+    .lock-overlay.hidden { display: none !important; }
+    .lock-card {
+      background: var(--panel); border: 1px solid var(--panel-border);
+      border-radius: 16px; padding: 28px 24px; max-width: 360px; width: 100%;
+      box-shadow: 0 10px 35px rgba(0,0,0,0.7);
+    }
+    .lock-icon { font-size: 2.2rem; margin-bottom: 12px; }
+    .lock-title { font-size: 1.1rem; font-weight: 700; letter-spacing: 1px; color: var(--accent); margin-bottom: 6px; }
+    .lock-subtitle { font-size: 0.78rem; color: var(--muted); margin-bottom: 18px; }
+    .lock-input {
+      width: 100%; background: #090d16; color: #fff; border: 1px solid #334155;
+      border-radius: 8px; padding: 12px; font-size: 1.1rem; text-align: center;
+      letter-spacing: 4px; margin-bottom: 14px; outline: none;
+    }
+    .lock-input:focus { border-color: var(--accent); }
+    .lock-error { font-size: 0.75rem; color: var(--high); margin-top: 10px; display: none; }
+
   </style>
   <!-- Optional auto-loaded config file -->
   <script src="config.js" onerror="console.log('No external config.js found. Using localStorage config.');"></script>
 </head>
 <body>
+  <!-- FULL SCREEN LOCK OVERLAY -->
+  <div class="lock-overlay hidden" id="lockScreenOverlay">
+    <div class="lock-card">
+      <div class="lock-icon">🔒</div>
+      <div class="lock-title">TACTICAL HUD LOCKED</div>
+      <div class="lock-subtitle">Enter security passcode to authorize sync</div>
+      <input type="password" id="passcodeInput" class="lock-input" placeholder="••••" autocomplete="current-password" onkeydown="if(event.key==='Enter') attemptUnlock()" />
+      <button class="btn btn-primary" style="width: 100%; padding: 10px;" onclick="attemptUnlock()">Authorize Access</button>
+      <div class="lock-error" id="lockErrorMsg">Invalid Passcode</div>
+    </div>
+  </div>
+
 
   <!-- TOP STATUS & CONTEXT SWITCHER -->
   <header class="hud-header">
@@ -162,6 +198,7 @@
       <button class="btn" id="reportBtn" title="Generate Work Briefing" onclick="openReportModal()">📊 Report</button>
       <button class="btn" id="toggleContextBtn" onclick="toggleManualContext()">Switch Mode</button>
       <button class="btn" onclick="syncHud()">↻</button>
+      <button class="btn" title="Lock HUD" onclick="lockHud()">🔒</button>
       <button class="btn" onclick="openSettings()">⚙️</button>
     </div>
   </header>
@@ -201,6 +238,14 @@
       <button class="pill" data-cap-energy="red" onclick="selectCaptureEnergy('red')">🔴 High Voltage</button>
       <button class="pill" data-cap-energy="yellow" onclick="selectCaptureEnergy('yellow')">🟡 Medium Cruise</button>
       <button class="pill" data-cap-energy="green" onclick="selectCaptureEnergy('green')">🟢 Low Battery</button>
+    </div>
+    <!-- Due Date Routing Pills -->
+    <div class="pill-row" style="margin-top:6px; align-items:center;">
+      <span style="font-size:0.7rem; color:var(--muted); margin-right:2px;">📅 Due:</span>
+      <button type="button" class="pill active" data-cap-due="none" onclick="selectCaptureDue('none')">None</button>
+      <button type="button" class="pill" data-cap-due="today" onclick="selectCaptureDue('today')">Today</button>
+      <button type="button" class="pill" data-cap-due="tomorrow" onclick="selectCaptureDue('tomorrow')">Tomorrow</button>
+      <input type="date" id="captureDueDateInput" title="Custom Due Date" style="background:#090d16; color:var(--muted); border:1px solid #334155; border-radius:999px; padding:3px 8px; font-size:0.72rem; outline:none;" onchange="selectCaptureCustomDue(this.value)" />
     </div>
   </section>
 
@@ -280,6 +325,10 @@
         <button class="btn btn-primary" style="margin-top:6px; width:100%;" onclick="importJsonConfig()">Import JSON Config</button>
       </div>
       <hr style="border-color:#1e293b; margin:12px 0;" />
+            <div class="field">
+        <label>HUD Security Passcode (Leave blank to disable lock screen)</label>
+        <input id="cfgPasscode" type="password" placeholder="Set a PIN or Passcode" />
+      </div>
       <div class="field"><label>Trello API Key</label><input id="cfgApiKey" type="password" placeholder="<YourTrelloApiKey>" /></div>
       <div class="field"><label>Trello API Token</label><input id="cfgToken" type="password" placeholder="<YourTrelloApiToken>" /></div>
       <div class="field"><label>Work Board ID (work)</label><input id="cfgBoardWork" type="text" /></div>
@@ -310,12 +359,72 @@
     energyFilter: "all",
     captureBoard: "work",
     captureEnergy: "none",
+    captureDue: "",
     saveStateCardId: null,
     activeNoteCard: null,
     boardCache: {},
     todayCards: [],
     inboxCards: []
   };
+
+    async function hashString(str) {
+    if (!str) return "";
+    const buf = new TextEncoder().encode(str);
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    return Array.from(new Uint8Array(hashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function getSavedPasscodeHash() {
+    const cfg = loadConfig();
+    return (cfg && cfg.passcodeHash) || localStorage.getItem("TACTICAL_HUD_PASS_HASH") || "";
+  }
+
+  function isHudUnlocked() {
+    const passHash = getSavedPasscodeHash();
+    if (!passHash) return true; // No password configured
+    return sessionStorage.getItem("TACTICAL_HUD_SESSION_AUTH") === "true";
+  }
+
+  function lockHud() {
+    const passHash = getSavedPasscodeHash();
+    if (!passHash) {
+      alert("No passcode set. You can configure one in ⚙️ Settings.");
+      return;
+    }
+    sessionStorage.removeItem("TACTICAL_HUD_SESSION_AUTH");
+    document.getElementById("passcodeInput").value = "";
+    document.getElementById("lockErrorMsg").style.display = "none";
+    document.getElementById("lockScreenOverlay").classList.remove("hidden");
+    document.getElementById("passcodeInput").focus();
+  }
+
+  async function attemptUnlock() {
+    const entered = document.getElementById("passcodeInput").value;
+    const targetHash = getSavedPasscodeHash();
+    const enteredHash = await hashString(entered);
+
+    if (enteredHash === targetHash) {
+      sessionStorage.setItem("TACTICAL_HUD_SESSION_AUTH", "true");
+      document.getElementById("lockScreenOverlay").classList.add("hidden");
+      document.getElementById("lockErrorMsg").style.display = "none";
+      syncHud();
+    } else {
+      const err = document.getElementById("lockErrorMsg");
+      err.textContent = "Invalid Passcode. Access Denied.";
+      err.style.display = "block";
+      document.getElementById("passcodeInput").value = "";
+      document.getElementById("passcodeInput").focus();
+    }
+  }
+
+  function checkLockGate() {
+    if (!isHudUnlocked()) {
+      document.getElementById("lockScreenOverlay").classList.remove("hidden");
+      document.getElementById("passcodeInput").focus();
+      return false;
+    }
+    return true;
+  }
 
   function loadConfig() {
     // 1. Check external auto-loaded config.js file first
@@ -392,6 +501,47 @@
     state.captureEnergy = color;
     document.querySelectorAll("[data-cap-energy]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.capEnergy === color);
+    });
+  }
+
+  function selectCaptureDue(preset) {
+    const dateInput = document.getElementById("captureDueDateInput");
+    if (preset === "none") {
+      state.captureDue = "";
+      if (dateInput) dateInput.value = "";
+    } else if (preset === "today") {
+      const now = new Date();
+      state.captureDue = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0, 0).toISOString();
+      if (dateInput) {
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        dateInput.value = `${now.getFullYear()}-${mm}-${dd}`;
+      }
+    } else if (preset === "tomorrow") {
+      const now = new Date();
+      const tom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 17, 0, 0);
+      state.captureDue = tom.toISOString();
+      if (dateInput) {
+        const mm = String(tom.getMonth() + 1).padStart(2, '0');
+        const dd = String(tom.getDate()).padStart(2, '0');
+        dateInput.value = `${tom.getFullYear()}-${mm}-${dd}`;
+      }
+    }
+    document.querySelectorAll("[data-cap-due]").forEach(btn => {
+      btn.classList.toggle("active", btn.dataset.capDue === preset);
+    });
+  }
+
+  function selectCaptureCustomDue(val) {
+    if (!val) {
+      selectCaptureDue("none");
+      return;
+    }
+    const parts = val.split("-");
+    const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 17, 0, 0);
+    state.captureDue = d.toISOString();
+    document.querySelectorAll("[data-cap-due]").forEach(btn => {
+      btn.classList.remove("active");
     });
   }
 
@@ -505,6 +655,7 @@
   }
 
   async function syncHud() {
+    if (!checkLockGate()) return;
     const cfg = loadConfig();
     if (!cfg || !cfg.apiKey || !cfg.token) {
       openSettings();
@@ -633,8 +784,15 @@
     if (state.captureEnergy !== "none" && cache.labelMap[state.captureEnergy]) {
       labelParam = `&idLabels=${cache.labelMap[state.captureEnergy]}`;
     }
+
+    let dueParam = "";
+    if (state.captureDue) {
+      dueParam = `&due=${encodeURIComponent(state.captureDue)}`;
+    }
+
     input.value = "";
-    await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}`);
+    selectCaptureDue("none");
+    await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}`);
     syncHud();
   }
 
@@ -790,6 +948,7 @@
 
   function openSettings() {
     const cfg = loadConfig() || { boards: {} };
+    document.getElementById("cfgPasscode").value = cfg.passcode || "";
     document.getElementById("cfgApiKey").value = cfg.apiKey || "";
     document.getElementById("cfgToken").value = cfg.token || "";
     document.getElementById("cfgBoardWork").value = (cfg.boards && cfg.boards.work) || "";
@@ -815,8 +974,20 @@
     }
   }
 
-  function saveSettings() {
+  async function saveSettings() {
+    const enteredPass = document.getElementById("cfgPasscode").value;
+    const passHash = enteredPass ? await hashString(enteredPass) : "";
+    if (passHash) {
+      localStorage.setItem("TACTICAL_HUD_PASS_HASH", passHash);
+      sessionStorage.setItem("TACTICAL_HUD_SESSION_AUTH", "true");
+    } else {
+      localStorage.removeItem("TACTICAL_HUD_PASS_HASH");
+      sessionStorage.removeItem("TACTICAL_HUD_SESSION_AUTH");
+    }
+
     const cfg = {
+      passcode: enteredPass,
+      passcodeHash: passHash,
       apiKey: document.getElementById("cfgApiKey").value.trim(),
       token: document.getElementById("cfgToken").value.trim(),
       boards: {
