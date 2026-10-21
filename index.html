@@ -341,28 +341,34 @@
     return isWeekdayWorkHours ? "work" : "personal";
   }
 
-  function applyTheme() {
+    function applyTheme() {
     const isWork = state.context === "work";
     document.documentElement.style.setProperty("--accent", isWork ? "#38bdf8" : "#a855f7");
-    document.getElementById("modeTitle").textContent = isWork ? "💼 WORK HUD" : "🏠 PERSONAL MULTI-HUD";
+    const modeTitleEl = document.getElementById("modeTitle");
+    if (modeTitleEl) modeTitleEl.textContent = isWork ? "💼 WORK HUD" : "🏠 PERSONAL MULTI-HUD";
     
-    document.getElementById("workBoardPills").style.display = isWork ? "flex" : "none";
-    document.getElementById("personalBoardPills").style.display = isWork ? "none" : "flex";
+    const workPills = document.getElementById("workBoardPills");
+    const personalPills = document.getElementById("personalBoardPills");
+    if (workPills) workPills.style.display = isWork ? "flex" : "none";
+    if (personalPills) personalPills.style.display = isWork ? "none" : "flex";
     
-    // Set appropriate default capture target per mode if needed
+    // Set appropriate default capture target per mode
     if (isWork && (state.captureBoard !== "work" && state.captureBoard !== "growth")) {
       state.captureBoard = "work";
-    } else if (!isWork && state.captureBoard === "work") {
+    } else if (!isWork && (state.captureBoard === "work" || !BOARD_LABELS[state.captureBoard])) {
       state.captureBoard = "life";
     }
 
-    // Refresh active pill state
+    // Refresh active pill state across visible container
     const currentPillContainer = isWork ? "#workBoardPills" : "#personalBoardPills";
     document.querySelectorAll(`${currentPillContainer} .pill`).forEach(btn => {
       btn.classList.toggle("active", btn.dataset.board === state.captureBoard);
     });
 
-    document.getElementById("captureTargetLabel").textContent = `Target: ${BOARD_LABELS[state.captureBoard]} -> 📥 Inbox`;
+    const targetLabelEl = document.getElementById("captureTargetLabel");
+    if (targetLabelEl) {
+      targetLabelEl.textContent = `Target: ${BOARD_LABELS[state.captureBoard] || "Inbox"} -> 📥 Inbox`;
+    }
   }
 
   function toggleManualContext() {
