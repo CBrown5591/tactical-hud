@@ -285,13 +285,18 @@
     <!-- CARD NOTE MODAL -->
   <div class="modal-backdrop" id="cardNoteModal">
     <div class="modal">
-      <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">📝 Card Notes</h2>
+      <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">💬 Card Comments</h2>
       <div class="field">
-        <textarea id="cardNoteInput" rows="6" placeholder="Add scratchpad notes, meeting takeaways, links, or next steps..."></textarea>
+        <label style="font-size:0.75rem; color:var(--muted); margin-bottom:4px; display:block;">Add New Comment / Note</label>
+        <textarea id="cardNoteInput" rows="3" placeholder="Add tactical notes, next steps, or status updates..."></textarea>
       </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
-        <button class="btn" onclick="closeNoteModal()">Cancel</button>
-        <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">Save Note</button>
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:14px;">
+        <button class="btn" onclick="closeNoteModal()">Close</button>
+        <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">+ Post Comment</button>
+      </div>
+      <div class="section-label" style="margin-bottom:6px;"><span>📜 RECENT COMMENTS</span></div>
+      <div id="cardCommentsHistory" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding-right:4px;">
+        <div class="empty-state" style="padding:8px 0;">No comments logged yet.</div>
       </div>
     </div>
   </div>
@@ -566,7 +571,7 @@
   async function fetchBoardData(boardKey, boardId) {
     const [lists, cards, labels] = await Promise.all([
       trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
-      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos"),
+      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos&actions=commentCard&actions_limit=5"),
       trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
     ]);
     const listMap = {};
@@ -689,10 +694,20 @@
             return;
           }
           const energyColor = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+          const commentsList = (card.actions && Array.isArray(card.actions))
+            ? card.actions.filter(a => a.type === "commentCard" && a.data && a.data.text).map(a => ({
+                id: a.id,
+                text: a.data.text,
+                date: a.date
+              }))
+            : [];
+          const latestNote = commentsList.length > 0 ? commentsList[0].text : (card.desc || "");
           const item = {
             id: card.id,
             name: card.name,
             desc: card.desc || "",
+            notes: latestNote,
+            comments: commentsList,
             boardKey,
             boardName: BOARD_LABELS[boardKey],
             energy: energyColor
@@ -724,8 +739,8 @@
     todayFiltered.forEach(c => {
       const el = document.createElement("div");
       el.className = `task-card energy-${c.energy}`;
-      const noteSnippet = c.desc
-        ? `<div class="task-notes-preview" title="Edit Note" onclick="openNoteModal('${c.id}','${c.boardKey}')">📝 ${escapeHtml(c.desc)}</div>`
+      const noteSnippet = c.notes
+        ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>`
         : "";
 
       el.innerHTML = `
@@ -735,7 +750,7 @@
           ${noteSnippet}
         </div>
         <div class="task-actions">
-          <button class="icon-btn" title="Edit Note" onclick="openNoteModal('${c.id}','${c.boardKey}')">📝</button>
+          <button class="icon-btn" title="Comments & Notes" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
           <button class="icon-btn" title="Move to Waiting" onclick="moveCard('${c.id}','${c.boardKey}','waiting')">⏳</button>
           <button class="icon-btn done" title="Complete Task" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
         </div>
@@ -803,13 +818,32 @@
     syncHud();
   }
 
-    function openNoteModal(cardId, boardKey) {
+    function renderModalComments(comments) {
+    const historyContainer = document.getElementById("cardCommentsHistory");
+    if (!comments || comments.length === 0) {
+      historyContainer.innerHTML = `<div class="empty-state" style="padding:8px 0;">No comments logged yet.</div>`;
+      return;
+    }
+    historyContainer.innerHTML = comments.map(cm => {
+      const dateStr = cm.date ? new Date(cm.date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+      return `
+        <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:7px 10px; font-size:0.75rem;">
+          <div style="color:#cbd5e1; white-space:pre-wrap; word-break:break-word;">${escapeHtml(cm.text)}</div>
+          <div style="font-size:0.65rem; color:var(--muted); margin-top:3px; text-align:right;">${dateStr}</div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function openNoteModal(cardId, boardKey) {
     const card = state.todayCards.find(c => c.id === cardId);
     if (!card) return;
     state.activeNoteCard = { id: cardId, boardKey };
-    document.getElementById("noteModalCardTitle").textContent = `📝 Notes: ${card.name}`;
-    document.getElementById("cardNoteInput").value = card.desc || "";
+    document.getElementById("noteModalCardTitle").textContent = `💬 ${card.name}`;
+    document.getElementById("cardNoteInput").value = "";
+    renderModalComments(card.comments || []);
     document.getElementById("cardNoteModal").classList.add("open");
+    document.getElementById("cardNoteInput").focus();
   }
 
   function closeNoteModal() {
@@ -819,21 +853,36 @@
 
   async function saveCardNote() {
     if (!state.activeNoteCard) return;
-    const { id, boardKey } = state.activeNoteCard;
+    const { id } = state.activeNoteCard;
     const noteText = document.getElementById("cardNoteInput").value.trim();
+    if (!noteText) {
+      closeNoteModal();
+      return;
+    }
     const saveBtn = document.getElementById("saveNoteBtn");
-    saveBtn.textContent = "Saving...";
+    saveBtn.textContent = "Posting...";
     try {
-      await trelloFetch(`/cards/${id}`, "PUT", `&desc=${encodeURIComponent(noteText)}`);
-      // Update local cache & state
+      // Post comment directly to Trello card actions API
+      const res = await trelloFetch(`/cards/${id}/actions/comments`, "POST", `&text=${encodeURIComponent(noteText)}`);
+      
+      const newComment = {
+        id: res.id || Date.now().toString(),
+        text: noteText,
+        date: res.date || new Date().toISOString()
+      };
+
       const target = state.todayCards.find(c => c.id === id);
-      if (target) target.desc = noteText;
+      if (target) {
+        target.comments = [newComment, ...(target.comments || [])];
+        target.notes = noteText;
+      }
       closeNoteModal();
       renderCards();
     } catch (e) {
-      alert("Failed to save note to Trello.");
+      console.error(e);
+      alert("Failed to post comment to Trello: " + (e.message || "API error"));
     } finally {
-      saveBtn.textContent = "Save Note";
+      saveBtn.textContent = "+ Post Comment";
     }
   }
 
@@ -858,7 +907,7 @@
       const boardResults = await Promise.all(targetBoards.map(async b => {
         const [lists, cards] = await Promise.all([
           trelloFetch(`/boards/${b.id}/lists`, "GET", "&fields=name,id"),
-          trelloFetch(`/boards/${b.id}/cards`, "GET", "&fields=name,id,idList,desc,dateLastActivity,labels")
+          trelloFetch(`/boards/${b.id}/cards`, "GET", "&fields=name,id,idList,desc,dateLastActivity,labels&actions=commentCard&actions_limit=3")
         ]);
         const doneListIds = lists.filter(l => l.name.toLowerCase().includes("done")).map(l => l.id);
         const waitingListIds = lists.filter(l => l.name.toLowerCase().includes("waiting")).map(l => l.id);
@@ -886,8 +935,11 @@
             report += `[${b.boardName}]\n`;
             b.doneCards.forEach(c => {
               report += `• ${c.name}\n`;
-              if (c.desc && c.desc.trim()) {
-                report += `  Notes: ${c.desc.trim().replace(/\n/g, "\n  ")}\n`;
+              const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
+                ? c.actions[0].data.text
+                : (c.desc && c.desc.trim() ? c.desc.trim() : "");
+              if (latestComment) {
+                report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
               }
             });
             report += `\n`;
@@ -905,8 +957,11 @@
             report += `[${b.boardName}]\n`;
             b.waitingCards.forEach(c => {
               report += `• ${c.name}\n`;
-              if (c.desc && c.desc.trim()) {
-                report += `  Notes: ${c.desc.trim().replace(/\n/g, "\n  ")}\n`;
+              const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
+                ? c.actions[0].data.text
+                : (c.desc && c.desc.trim() ? c.desc.trim() : "");
+              if (latestComment) {
+                report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
               }
             });
             report += `\n`;
