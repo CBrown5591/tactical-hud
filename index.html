@@ -170,6 +170,19 @@
     .lock-input:focus { border-color: var(--accent); }
     .lock-error { font-size: 0.75rem; color: var(--high); margin-top: 10px; display: none; }
 
+      /* Mini Energy Triage Buttons */
+    .energy-picker {
+      display: inline-flex; gap: 4px; align-items: center; margin-left: 6px;
+    }
+    .mini-energy-btn {
+      background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+      padding: 2px 6px; font-size: 0.72rem; cursor: pointer; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, border-color 0.1s, background 0.1s;
+    }
+    .mini-energy-btn:active { transform: scale(0.9); }
+    .mini-energy-btn.active { border-color: #fff; background: #334155; box-shadow: 0 0 6px rgba(255,255,255,0.2); }
+
   </style>
   <!-- Optional auto-loaded config file -->
   <script src="config.js" onerror="console.log('No external config.js found. Using localStorage config.');"></script>
@@ -710,7 +723,8 @@
             comments: commentsList,
             boardKey,
             boardName: BOARD_LABELS[boardKey],
-            energy: energyColor
+            energy: energyColor,
+            labels: card.labels || []
           };
           if (card.idList === listMap.today) state.todayCards.push(item);
           else if (card.idList === listMap.inbox) state.inboxCards.push(item);
@@ -766,7 +780,14 @@
       el.innerHTML = `
         <div class="task-info">
           <div class="task-title">${escapeHtml(c.name)}</div>
-          <div class="task-meta"><span class="board-tag">${c.boardName}</span></div>
+          <div class="task-meta">
+            <span class="board-tag">${c.boardName}</span>
+            <span class="energy-picker" title="Assign Energy Quota">
+              <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
+              <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
+              <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
+            </span>
+          </div>
         </div>
         <div class="task-actions">
           <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
@@ -809,6 +830,37 @@
     selectCaptureDue("none");
     await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}`);
     syncHud();
+  }
+
+  async function setCardEnergy(cardId, boardKey, energyColor) {
+    const cache = state.boardCache[boardKey];
+    if (!cache || !cache.labelMap || !cache.labelMap[energyColor]) {
+      alert(`Could not find ${energyColor} energy label on the board.`);
+      return;
+    }
+    const targetLabelId = cache.labelMap[energyColor];
+    const card = state.inboxCards.find(c => c.id === cardId) || state.todayCards.find(c => c.id === cardId);
+    const existingLabels = (card && card.labels) ? card.labels : [];
+    
+    // Preserve any non-energy labels (e.g., recurrence tags) and replace energy label
+    const energyColors = ["red", "yellow", "green"];
+    const otherLabelIds = existingLabels
+      .filter(l => !energyColors.includes(l.color))
+      .map(l => l.id);
+    const newLabelIds = [...otherLabelIds, targetLabelId].join(",");
+
+    try {
+      await trelloFetch(`/cards/${cardId}`, "PUT", `&idLabels=${newLabelIds}`);
+      if (card) {
+        card.energy = energyColor;
+        card.labels = [...existingLabels.filter(l => !energyColors.includes(l.color)), { id: targetLabelId, color: energyColor }];
+      }
+      // Re-sync: Because of board automation rules, tagging an inbox item will automatically route it to Queue/Today!
+      syncHud();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to assign energy label to card.");
+    }
   }
 
   async function moveCard(cardId, boardKey, targetListKey) {
