@@ -383,6 +383,7 @@ function getCardRecurCadence(card) {
   if (!card || !card.labels) return "none";
   for (const lb of card.labels) {
     const name = (lb.name || "").toLowerCase();
+    if (name.includes("twice daily")) return "twice daily";
     if (name.includes("daily")) return "daily";
     if (name.includes("bi-weekly") || name.includes("biweekly")) return "biweekly";
     if (name.includes("weekly")) return "weekly";
