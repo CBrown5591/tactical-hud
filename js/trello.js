@@ -34,7 +34,8 @@ async function fetchBoardData(boardKey, boardId) {
   labels.forEach(lb => {
     if (lb.color) labelMap[lb.color] = lb.id;
     const name = (lb.name || "").toLowerCase().trim();
-    if (name.includes("daily")) recurLabelMap.daily = lb.id;
+    if (name.includes("twice daily") || name.includes("2x daily") || name.includes("twicedaily")) recurLabelMap.twicedaily = lb.id;
+    else if (name.includes("daily")) recurLabelMap.daily = lb.id;
     else if (name.includes("bi-weekly") || name.includes("biweekly")) recurLabelMap.biweekly = lb.id;
     else if (name.includes("weekly")) recurLabelMap.weekly = lb.id;
     else if (name.includes("monthly")) recurLabelMap.monthly = lb.id;
@@ -288,4 +289,5 @@ function emailReport() {
   const report = document.getElementById("reportContent").value;
   const recipient = (window.HUD_CONFIG && window.HUD_CONFIG.reportEmail) || "charlesabrown0505@gmail.com";
   const dateStr = new Date().toISOString().split("T")[0];
-  window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Work & Growth Status Report - ${dateStr}`)}&body=${encodeURIComponent(report)}`
+  window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Work & Growth Status Report - ${dateStr}`)}&body=${encodeURIComponent(report)}`;
+}
