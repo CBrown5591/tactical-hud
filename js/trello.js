@@ -30,8 +30,16 @@ async function fetchBoardData(boardKey, boardId) {
   if (!listMap.today && lists.length > 1) listMap.today = lists[1].id;
 
   const labelMap = {};
-  labels.forEach(lb => { if (lb.color) labelMap[lb.color] = lb.id; });
-  state.boardCache[boardKey] = { boardId, listMap, labelMap };
+  const recurLabelMap = {};
+  labels.forEach(lb => {
+    if (lb.color) labelMap[lb.color] = lb.id;
+    const name = (lb.name || "").toLowerCase().trim();
+    if (name.includes("daily")) recurLabelMap.daily = lb.id;
+    else if (name.includes("bi-weekly") || name.includes("biweekly")) recurLabelMap.biweekly = lb.id;
+    else if (name.includes("weekly")) recurLabelMap.weekly = lb.id;
+    else if (name.includes("monthly")) recurLabelMap.monthly = lb.id;
+  });
+  state.boardCache[boardKey] = { boardId, listMap, labelMap, recurLabelMap, rawLabels: labels };
   return { boardKey, listMap, cards };
 }
 
@@ -280,5 +288,4 @@ function emailReport() {
   const report = document.getElementById("reportContent").value;
   const recipient = (window.HUD_CONFIG && window.HUD_CONFIG.reportEmail) || "charlesabrown0505@gmail.com";
   const dateStr = new Date().toISOString().split("T")[0];
-  window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Work & Growth Status Report - ${dateStr}`)}&body=${encodeURIComponent(report)}`;
-}
+  window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Work & Growth Status Report - ${dateStr}`)}&body=${encodeURIComponent(report)}`
