@@ -383,7 +383,7 @@ function getCardRecurCadence(card) {
   if (!card || !card.labels) return "none";
   for (const lb of card.labels) {
     const name = (lb.name || "").toLowerCase();
-    if (name.includes("twice daily")) return "twice daily";
+    if (name.includes("twice daily") || name.includes("2x daily") || name.includes("twicedaily")) return "twicedaily";
     if (name.includes("daily")) return "daily";
     if (name.includes("bi-weekly") || name.includes("biweekly")) return "biweekly";
     if (name.includes("weekly")) return "weekly";
@@ -396,6 +396,7 @@ function updateModalRecurPills(card) {
   const currentRecur = getCardRecurCadence(card);
   const map = {
     none: "modalRecurNone",
+    twicedaily: "modalRecurTwiceDaily",
     daily: "modalRecurDaily",
     weekly: "modalRecurWeekly",
     biweekly: "modalRecurBiweekly",
@@ -414,7 +415,7 @@ async function setCardRecurCadence(newCadence) {
   const card = state.allLoadedCards.find(c => c.id === id);
   if (!cache || !card) return;
 
-  const recurKeywords = ["daily", "weekly", "bi-weekly", "biweekly", "monthly"];
+  const recurKeywords = ["twice daily", "2x daily", "twicedaily", "daily", "weekly", "bi-weekly", "biweekly", "monthly"];
   const preservedLabelIds = (card.labels || [])
     .filter(l => !recurKeywords.some(kw => (l.name || "").toLowerCase().includes(kw)))
     .map(l => l.id);
