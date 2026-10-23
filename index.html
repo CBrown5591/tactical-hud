@@ -115,6 +115,7 @@
     <div class="pill-row" style="margin-top:6px; align-items:center;">
       <span style="font-size:0.7rem; color:var(--muted); margin-right:2px;">🔁 Repeat:</span>
       <button type="button" class="pill active" data-cap-recur="none" onclick="selectCaptureRecur('none')">None</button>
+      <button type="button" class="pill" data-cap-recur="twicedaily" onclick="selectCaptureRecur('twicedaily')">Twice Daily</button>
       <button type="button" class="pill" data-cap-recur="daily" onclick="selectCaptureRecur('daily')">Daily</button>
       <button type="button" class="pill" data-cap-recur="weekly" onclick="selectCaptureRecur('weekly')">Weekly</button>
       <button type="button" class="pill" data-cap-recur="biweekly" onclick="selectCaptureRecur('biweekly')">Bi-Weekly</button>
@@ -180,6 +181,7 @@
         <div class="section-label" style="margin-bottom:6px;"><span>🔁 RECURRENCE CADENCE</span></div>
         <div class="pill-row" id="modalRecurPills" style="margin-top:0;">
           <button type="button" class="pill" id="modalRecurNone" onclick="setCardRecurCadence('none')">None</button>
+          <button type="button" class="pill" id="modalRecurTwiceDaily" onclick="setCardRecurCadence('twicedaily')">Twice Daily</button>
           <button type="button" class="pill" id="modalRecurDaily" onclick="setCardRecurCadence('daily')">Daily</button>
           <button type="button" class="pill" id="modalRecurWeekly" onclick="setCardRecurCadence('weekly')">Weekly</button>
           <button type="button" class="pill" id="modalRecurBiweekly" onclick="setCardRecurCadence('biweekly')">Bi-Weekly</button>
