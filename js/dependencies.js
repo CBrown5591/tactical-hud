@@ -102,21 +102,18 @@ async function manageCardDependencies(results) {
       }
     }
 
-    // Phase B: Move resolved cards from Waiting -> Queue
+    // Phase B: Move unblocked & resolved cards from Waiting -> Queue
     const waitingCards = cards.filter(c => c.idList === listMap.waiting);
     for (const card of waitingCards) {
-      const rels = extractCardRelations(card, allCardsMap);
-      if (rels.blockedBy && rels.blockedBy.length > 0) {
-        const blockers = getUnresolvedBlockers(card, allCardsMap);
-        if (blockers.length === 0) {
-          try {
-            await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
-            card.idList = listMap.queue;
-            if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
-            console.log(`[Dependency Engine] Blockers cleared for "${card.name}". Returned to Queue.`);
-          } catch (e) {
-            console.error("Failed to return unblocked card to Queue:", card.id, e);
-          }
+      const blockers = getUnresolvedBlockers(card, allCardsMap);
+      if (blockers.length === 0) {
+        try {
+          await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
+          card.idList = listMap.queue;
+          if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
+          console.log(`[Dependency Engine] No active blockers for "${card.name}". Routed to Queue.`);
+        } catch (e) {
+          console.error("Failed to return unblocked card to Queue:", card.id, e);
         }
       }
     }
