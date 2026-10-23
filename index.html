@@ -706,6 +706,63 @@
     return activeBlockers;
   }
 
+  async function manageCardDependencies(results) {
+    // 1. Build global card map across all active boards
+    const allCardsMap = {};
+    for (const { listMap, cards } of results) {
+      for (const c of cards) {
+        allCardsMap[c.id] = {
+          id: c.id,
+          name: c.name,
+          idList: c.idList,
+          isDone: (c.idList === listMap.done)
+        };
+      }
+    }
+
+    // 2. Process each board for dependency-driven list transitions
+    for (const { boardKey, listMap, cards } of results) {
+      if (!listMap.queue || !listMap.waiting) continue;
+
+      // Phase A: Move newly blocked cards from Queue -> Waiting
+      const queueCards = cards.filter(c => c.idList === listMap.queue);
+      for (const card of queueCards) {
+        const blockers = getUnresolvedBlockers(card, allCardsMap);
+        if (blockers.length > 0) {
+          try {
+            await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.waiting}`);
+            card.idList = listMap.waiting;
+            if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.waiting;
+            console.log(`[Dependency Engine] Moved "${card.name}" to Waiting (Blocked by: ${blockers.join(", ")})`);
+          } catch (e) {
+            console.error("Failed to move blocked card to Waiting:", card.id, e);
+          }
+        }
+      }
+
+      // Phase B: Move resolved cards from Waiting -> Queue
+      const waitingCards = cards.filter(c => c.idList === listMap.waiting);
+      for (const card of waitingCards) {
+        const rels = extractCardRelations(card);
+        // Only target cards that have explicit Card Relations dependencies
+        if (rels.blockedBy && rels.blockedBy.length > 0) {
+          const blockers = getUnresolvedBlockers(card, allCardsMap);
+          if (blockers.length === 0) {
+            // All blockers are resolved (in Done)! Return card to Queue
+            try {
+              await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
+              card.idList = listMap.queue;
+              if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
+              console.log(`[Dependency Engine] Blockers cleared for "${card.name}". Returned to Queue.`);
+            } catch (e) {
+              console.error("Failed to return unblocked card to Queue:", card.id, e);
+            }
+          }
+        }
+      }
+    }
+  }
+
   async function autoPromoteCards(results) {
     let promotedAny = false;
 
@@ -804,7 +861,10 @@
     try {
       const results = await Promise.all(validTargets.map(k => fetchBoardData(k, cfg.boards[k])));
       
-      // Auto-promote queue cards into open energy slots (1 Heavy / 1 Med / 2 Light)
+      // 1. Dependency Engine: Route blocked cards to Waiting, and return resolved cards to Queue
+      await manageCardDependencies(results);
+
+      // 2. Auto-promote queue cards into open energy slots (1 Heavy / 1 Med / 2 Light)
       await autoPromoteCards(results);
 
       state.todayCards = [];
