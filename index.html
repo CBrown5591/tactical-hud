@@ -356,9 +356,12 @@
         <label style="font-size:0.75rem; color:var(--muted); margin-bottom:4px; display:block;">Add New Comment / Note</label>
         <textarea id="cardNoteInput" rows="3" placeholder="Add tactical notes, next steps, or status updates..."></textarea>
       </div>
-      <div style="display:flex; justify-content:flex-end; gap:8px; margin-bottom:14px;">
-        <button class="btn" onclick="closeNoteModal()">Close</button>
-        <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">+ Post Comment</button>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+        <a id="cardTrelloLinkBtn" href="#" target="_blank" class="btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-size:0.75rem;" title="Manage Card Relations in Trello">🔗 Card in Trello</a>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="closeNoteModal()">Close</button>
+          <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">+ Post Comment</button>
+        </div>
       </div>
       <div class="section-label" style="margin-bottom:6px;"><span>📜 RECENT COMMENTS</span></div>
       <div id="cardCommentsHistory" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding-right:4px;">
@@ -642,7 +645,7 @@
   async function fetchBoardData(boardKey, boardId) {
     const [lists, cards, labels] = await Promise.all([
       trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
-      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos&actions=commentCard&actions_limit=5"),
+      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos,shortUrl&actions=commentCard&actions_limit=5&pluginData=true"),
       trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
     ]);
     const listMap = {};
@@ -671,8 +674,54 @@
     return { boardKey, listMap, cards };
   }
 
-      async function autoPromoteCards(results) {
+      function extractCardRelations(card) {
+    if (!card.pluginData || !Array.isArray(card.pluginData)) {
+      return { blockedBy: [], blocks: [], parent: null, children: [] };
+    }
+    for (const p of card.pluginData) {
+      if (p.value) {
+        try {
+          const parsed = JSON.parse(p.value);
+          if (parsed && parsed["card-relations"]) {
+            return parsed["card-relations"];
+          }
+        } catch (e) {}
+      }
+    }
+    return { blockedBy: [], blocks: [], parent: null, children: [] };
+  }
+
+  function getUnresolvedBlockers(card, allCardsMap) {
+    const rels = extractCardRelations(card);
+    if (!rels.blockedBy || rels.blockedBy.length === 0) return [];
+    
+    const activeBlockers = [];
+    for (const b of rels.blockedBy) {
+      const blockerCard = allCardsMap[b.id];
+      // If blocker card is found and NOT in a done list, it's an active blocker
+      if (blockerCard && !blockerCard.isDone) {
+        activeBlockers.push(b.name || blockerCard.name);
+      }
+    }
+    return activeBlockers;
+  }
+
+  async function autoPromoteCards(results) {
     let promotedAny = false;
+
+    // Build global card lookup map to resolve cross-card blockers
+    const allCardsMap = {};
+    for (const { listMap, cards } of results) {
+      for (const c of cards) {
+        allCardsMap[c.id] = {
+          id: c.id,
+          name: c.name,
+          idList: c.idList,
+          isDone: (c.idList === listMap.done)
+        };
+      }
+    }
+
     for (const { boardKey, listMap, cards } of results) {
       if (!listMap.today || !listMap.queue) continue;
 
@@ -713,6 +762,13 @@
 
       for (const card of sortedQueue) {
         if (totalSlots === 0) break;
+
+        // Dependency Gate: If card is blocked by an incomplete task, DO NOT promote!
+        const blockers = getUnresolvedBlockers(card, allCardsMap);
+        if (blockers.length > 0) {
+          continue; // Gated: Waiting on prerequisite task
+        }
+
         const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
         if (slots[col] && slots[col] > 0) {
           try {
@@ -755,6 +811,18 @@
       state.inboxCards = [];
       state.saveStateCardId = null;
 
+      const allCardsMap = {};
+      for (const { listMap, cards } of results) {
+        for (const c of cards) {
+          allCardsMap[c.id] = {
+            id: c.id,
+            name: c.name,
+            idList: c.idList,
+            isDone: (c.idList === listMap.done)
+          };
+        }
+      }
+
       results.forEach(({ boardKey, listMap, cards }) => {
         cards.forEach(card => {
           if (card.name.startsWith("🎯 SAVE STATE")) {
@@ -773,6 +841,17 @@
               }))
             : [];
           const latestNote = commentsList.length > 0 ? commentsList[0].text : (card.desc || "");
+          const rels = extractCardRelations(card);
+          const activeBlockers = [];
+          if (rels.blockedBy && rels.blockedBy.length > 0) {
+            for (const b of rels.blockedBy) {
+              const blockerCard = allCardsMap[b.id];
+              if (blockerCard && !blockerCard.isDone) {
+                activeBlockers.push(b.name || blockerCard.name);
+              }
+            }
+          }
+
           const item = {
             id: card.id,
             name: card.name,
@@ -782,7 +861,10 @@
             boardKey,
             boardName: BOARD_LABELS[boardKey],
             energy: energyColor,
-            labels: card.labels || []
+            labels: card.labels || [],
+            shortUrl: card.shortUrl || `https://trello.com/c/${card.id}`,
+            relations: rels,
+            blockers: activeBlockers
           };
           if (card.idList === listMap.today) state.todayCards.push(item);
           else if (card.idList === listMap.inbox) state.inboxCards.push(item);
@@ -815,10 +897,17 @@
         ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>`
         : "";
 
+      const blockerTag = (c.blockers && c.blockers.length > 0)
+        ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>`
+        : "";
+
       el.innerHTML = `
         <div class="task-info">
           <div class="task-title">${escapeHtml(c.name)}</div>
-          <div class="task-meta"><span class="board-tag">${c.boardName}</span></div>
+          <div class="task-meta">
+            <span class="board-tag">${c.boardName}</span>
+            ${blockerTag}
+          </div>
           ${noteSnippet}
         </div>
         <div class="task-actions">
@@ -950,6 +1039,10 @@
     if (!card) return;
     state.activeNoteCard = { id: cardId, boardKey };
     document.getElementById("noteModalCardTitle").textContent = `💬 ${card.name}`;
+    const trelloLinkBtn = document.getElementById("cardTrelloLinkBtn");
+    if (trelloLinkBtn) {
+      trelloLinkBtn.href = card.shortUrl || `https://trello.com/c/${card.id}`;
+    }
     document.getElementById("cardNoteInput").value = "";
     renderModalComments(card.comments || []);
     document.getElementById("cardNoteModal").classList.add("open");
