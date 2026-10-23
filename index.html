@@ -111,6 +111,15 @@
       <button type="button" class="pill" data-cap-due="tomorrow" onclick="selectCaptureDue('tomorrow')">Tomorrow</button>
       <input type="date" id="captureDueDateInput" title="Custom Due Date" style="background:#090d16; color:var(--muted); border:1px solid #334155; border-radius:999px; padding:3px 8px; font-size:0.72rem; outline:none;" onchange="selectCaptureCustomDue(this.value)" />
     </div>
+    <!-- Recurrence Cadence Selector -->
+    <div class="pill-row" style="margin-top:6px; align-items:center;">
+      <span style="font-size:0.7rem; color:var(--muted); margin-right:2px;">🔁 Repeat:</span>
+      <button type="button" class="pill active" data-cap-recur="none" onclick="selectCaptureRecur('none')">None</button>
+      <button type="button" class="pill" data-cap-recur="daily" onclick="selectCaptureRecur('daily')">Daily</button>
+      <button type="button" class="pill" data-cap-recur="weekly" onclick="selectCaptureRecur('weekly')">Weekly</button>
+      <button type="button" class="pill" data-cap-recur="biweekly" onclick="selectCaptureRecur('biweekly')">Bi-Weekly</button>
+      <button type="button" class="pill" data-cap-recur="monthly" onclick="selectCaptureRecur('monthly')">Monthly</button>
+    </div>
     <!-- Blocker Dependency Routing Row -->
     <div class="pill-row" style="margin-top:6px; align-items:center;">
       <span style="font-size:0.7rem; color:var(--muted); margin-right:2px;">🔒 Blocked by:</span>
@@ -163,6 +172,18 @@
             <option value="">-- Select Prerequisite Task --</option>
           </select>
           <button class="btn btn-primary" id="addBlockerBtn" onclick="addCardBlocker()" style="white-space:nowrap; padding:6px 10px; font-size:0.75rem;">+ Set Blocker</button>
+        </div>
+      </div>
+
+      <!-- In-Modal Recurrence Cadence Selector -->
+      <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-bottom:12px;">
+        <div class="section-label" style="margin-bottom:6px;"><span>🔁 RECURRENCE CADENCE</span></div>
+        <div class="pill-row" id="modalRecurPills" style="margin-top:0;">
+          <button type="button" class="pill" id="modalRecurNone" onclick="setCardRecurCadence('none')">None</button>
+          <button type="button" class="pill" id="modalRecurDaily" onclick="setCardRecurCadence('daily')">Daily</button>
+          <button type="button" class="pill" id="modalRecurWeekly" onclick="setCardRecurCadence('weekly')">Weekly</button>
+          <button type="button" class="pill" id="modalRecurBiweekly" onclick="setCardRecurCadence('biweekly')">Bi-Weekly</button>
+          <button type="button" class="pill" id="modalRecurMonthly" onclick="setCardRecurCadence('monthly')">Monthly</button>
         </div>
       </div>
 
