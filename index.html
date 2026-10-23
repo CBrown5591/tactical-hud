@@ -395,6 +395,11 @@
         <textarea id="jsonPasteBox" rows="3" placeholder='{"apiKey":"...","token":"...","boards":{...}}'></textarea>
         <button class="btn btn-primary" style="margin-top:6px; width:100%;" onclick="importJsonConfig()">Import JSON Config</button>
       </div>
+            <hr style="border-color:#1e293b; margin:12px 0;" />
+      <div class="section-label" style="margin-bottom:6px;"><span>🔍 POWER-UP DIAGNOSTICS</span></div>
+      <p style="font-size:0.72rem; color:var(--muted); margin-bottom:8px;">Inspect Card Relations pluginData and test API write permissions.</p>
+      <button class="btn" style="width:100%; margin-bottom:8px;" onclick="runRelationsDiagnostic()">🔍 Inspect Card Relations & Test Write Scope</button>
+      <textarea id="diagOutputBox" rows="6" style="width:100%; font-family:monospace; font-size:0.72rem; background:#090d16; color:#94a3b8; border:1px solid #334155; border-radius:8px; padding:8px; display:none;" readonly placeholder="Diagnostic output will appear here..."></textarea>
       <hr style="border-color:#1e293b; margin:12px 0;" />
             <div class="field">
         <label>HUD Security Passcode (Leave blank to disable lock screen)</label>
@@ -1104,6 +1109,92 @@
     const subject = encodeURIComponent(`Work & Growth Status Report - ${dateStr}`);
     const body = encodeURIComponent(report);
     window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
+  }
+
+    async function runRelationsDiagnostic() {
+    const cfg = loadConfig();
+    const out = document.getElementById("diagOutputBox");
+    out.style.display = "block";
+    out.value = "Scanning boards for cards with Card Relations pluginData...\n";
+
+    if (!cfg || !cfg.apiKey || !cfg.token || !cfg.boards) {
+      out.value += "ERROR: Missing API credentials or boards in config.\n";
+      return;
+    }
+
+    const boardEntries = Object.entries(cfg.boards).filter(([k, id]) => id && !id.startsWith("YOUR_"));
+    if (boardEntries.length === 0) {
+      out.value += "ERROR: No valid board IDs found in config.\n";
+      return;
+    }
+
+    let foundAnyPlugin = false;
+
+    for (const [key, boardId] of boardEntries) {
+      out.value += `\n[Board: ${key}] Checking /boards/${boardId}/cards?pluginData=true...\n`;
+      try {
+        const cards = await trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,shortLink&pluginData=true");
+        const cardsWithData = cards.filter(c => c.pluginData && c.pluginData.length > 0);
+
+        if (cardsWithData.length === 0) {
+          out.value += `-> No cards on board '${key}' currently have pluginData.\n`;
+          continue;
+        }
+
+        foundAnyPlugin = true;
+        out.value += `-> Found ${cardsWithData.length} card(s) with pluginData!\n`;
+
+        for (const c of cardsWithData) {
+          out.value += `\n-----------------------------------------\n`;
+          out.value += `CARD: "${c.name}" (ID: ${c.id})\n`;
+          
+          for (const p of c.pluginData) {
+            out.value += `  idPlugin: ${p.idPlugin}\n`;
+            out.value += `  scope: ${p.scope}\n`;
+            out.value += `  Raw Value: ${p.value}\n`;
+
+            // Try formatting value as JSON
+            try {
+              const parsed = JSON.parse(p.value);
+              out.value += `  Parsed Schema: ${JSON.stringify(parsed, null, 2).replace(/\n/g, "\n  ")}\n`;
+            } catch (e) {
+              out.value += `  (Value is not raw JSON)\n`;
+            }
+
+            // Test Write Permission Probe
+            out.value += `\n  [Write Probe] Testing PUT /cards/${c.id}/pluginData/${p.idPlugin}...\n`;
+            try {
+              const testUrl = `https://api.trello.com/1/cards/${c.id}/pluginData/${p.idPlugin}?key=${cfg.apiKey}&token=${cfg.token}`;
+              const res = await fetch(testUrl, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ value: p.value }) // echo back existing value safely
+              });
+
+              if (res.ok) {
+                out.value += `  -> WRITE PROBE RESULT: SUCCESS (HTTP ${res.status})! Direct API writing to this Power-Up is PERMITTED!\n`;
+              } else {
+                const errText = await res.text();
+                out.value += `  -> WRITE PROBE RESULT: RESTRICTED (HTTP ${res.status}): ${errText}\n`;
+                out.value += `     (Trello blocks public API writing to third-party plugin scopes).\n`;
+              }
+            } catch (err) {
+              out.value += `  -> WRITE PROBE ERROR: ${err.message}\n`;
+            }
+          }
+        }
+      } catch (err) {
+        out.value += `-> Failed to fetch board '${key}': ${err.message}\n`;
+      }
+    }
+
+    if (!foundAnyPlugin) {
+      out.value += `\nSUMMARY:\nNo cards with Card Relations pluginData detected across scanned boards.\n`;
+      out.value += `Tip: Open Trello, add a dependency relation to at least one card on your board using Card Relations, then tap this button again.\n`;
+    } else {
+      out.value += `\n-----------------------------------------\n`;
+      out.value += `DIAGNOSTIC COMPLETE.\n`;
+    }
   }
 
   function openSettings() {
