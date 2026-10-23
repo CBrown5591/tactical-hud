@@ -62,6 +62,24 @@
       border-radius: 8px; padding: 10px; font-size: 0.9rem;
     }
 
+    /* Tactical Pomodoro Module */
+    .pomodoro-card {
+      background: var(--panel); border: 1px solid var(--panel-border);
+      border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .pomo-header { display: flex; justify-content: space-between; align-items: center; }
+    .pomo-main-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .pomo-display {
+      font-family: monospace; font-size: 1.85rem; font-weight: 800; letter-spacing: 2px;
+      color: var(--accent); line-height: 1; text-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
+    }
+    .pomo-display.break-mode { color: var(--low); text-shadow: 0 0 10px rgba(34, 197, 94, 0.25); }
+    .pomo-progress-track { width: 100%; height: 4px; background: #090d16; border-radius: 99px; overflow: hidden; }
+    .pomo-progress-fill { height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease; }
+    .pomo-progress-fill.break-mode { background: var(--low); }
+    .pomo-controls { display: flex; gap: 6px; align-items: center; }
+
     /* Quick Capture */
     .capture-box {
       background: var(--panel); border: 1px solid var(--panel-border);
@@ -73,6 +91,17 @@
       background: #090d16; color: var(--muted); border: 1px solid #334155; cursor: pointer;
     }
     .pill.active { background: var(--accent); color: #090d16; border-color: var(--accent); }
+
+    /* Mini Energy Triage Buttons */
+    .energy-picker { display: inline-flex; gap: 4px; align-items: center; margin-left: 6px; }
+    .mini-energy-btn {
+      background: #1e293b; border: 1px solid #334155; border-radius: 6px;
+      padding: 2px 6px; font-size: 0.72rem; cursor: pointer; line-height: 1;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: transform 0.1s, border-color 0.1s, background 0.1s;
+    }
+    .mini-energy-btn:active { transform: scale(0.9); }
+    .mini-energy-btn.active { border-color: #fff; background: #334155; box-shadow: 0 0 6px rgba(255,255,255,0.2); }
 
     /* Energy Filter Bar */
     .energy-bar { display: flex; gap: 6px; margin-bottom: 12px; overflow-x: auto; padding-bottom: 2px; }
@@ -108,7 +137,7 @@
     .task-card.energy-green { border-left-color: var(--low); }
     .task-info { flex: 1; min-width: 0; }
     .task-title { font-size: 0.88rem; font-weight: 600; word-break: break-word; line-height: 1.3; }
-    .task-meta { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.7rem; color: var(--muted); }
+    .task-meta { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 0.7rem; color: var(--muted); flex-wrap: wrap; }
     .board-tag { background: #1e293b; padding: 1px 6px; border-radius: 4px; color: #cbd5e1; }
     .task-actions { display: flex; gap: 4px; flex-shrink: 0; }
     .icon-btn {
@@ -131,7 +160,7 @@
     .modal h2 { font-size: 1.05rem; margin-bottom: 10px; }
     .field { margin-bottom: 10px; }
     .field label { display: block; font-size: 0.75rem; color: var(--muted); margin-bottom: 4px; }
-    .field input, .field textarea {
+    .field input, .field textarea, .field select {
       width: 100%; background: #090d16; color: #fff; border: 1px solid #334155;
       border-radius: 8px; padding: 8px 10px; font-size: 0.82rem;
     }
@@ -146,7 +175,6 @@
     }
     .task-notes-preview:hover { color: #f8fafc; border-left-color: #fff; }
 
-  
     /* Lock Screen Overlay */
     .lock-overlay {
       position: fixed; inset: 0; background: #070a12; z-index: 100;
@@ -169,51 +197,7 @@
     }
     .lock-input:focus { border-color: var(--accent); }
     .lock-error { font-size: 0.75rem; color: var(--high); margin-top: 10px; display: none; }
-
-      /* Mini Energy Triage Buttons */
-    .energy-picker {
-      display: inline-flex; gap: 4px; align-items: center; margin-left: 6px;
-    }
-    .mini-energy-btn {
-      background: #1e293b; border: 1px solid #334155; border-radius: 6px;
-      padding: 2px 6px; font-size: 0.72rem; cursor: pointer; line-height: 1;
-      display: inline-flex; align-items: center; justify-content: center;
-      transition: transform 0.1s, border-color 0.1s, background 0.1s;
-    }
-    .mini-energy-btn:active { transform: scale(0.9); }
-    .mini-energy-btn.active { border-color: #fff; background: #334155; box-shadow: 0 0 6px rgba(255,255,255,0.2); }
-
-  
-    /* Tactical Pomodoro Module */
-    .pomodoro-card {
-      background: var(--panel); border: 1px solid var(--panel-border);
-      border-radius: 12px; padding: 10px 14px; margin-bottom: 12px;
-      display: flex; flex-direction: column; gap: 8px;
-    }
-    .pomo-header {
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .pomo-main-row {
-      display: flex; justify-content: space-between; align-items: center; gap: 12px;
-    }
-    .pomo-display {
-      font-family: monospace; font-size: 1.85rem; font-weight: 800; letter-spacing: 2px;
-      color: var(--accent); line-height: 1; text-shadow: 0 0 10px rgba(56, 189, 248, 0.25);
-    }
-    .pomo-display.break-mode {
-      color: var(--low); text-shadow: 0 0 10px rgba(34, 197, 94, 0.25);
-    }
-    .pomo-progress-track {
-      width: 100%; height: 4px; background: #090d16; border-radius: 99px; overflow: hidden;
-    }
-    .pomo-progress-fill {
-      height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease;
-    }
-    .pomo-progress-fill.break-mode { background: var(--low); }
-    .pomo-controls { display: flex; gap: 6px; align-items: center; }
-
   </style>
-  <!-- Optional auto-loaded config file -->
   <script src="config.js" onerror="console.log('No external config.js found. Using localStorage config.');"></script>
 </head>
 <body>
@@ -228,7 +212,6 @@
       <div class="lock-error" id="lockErrorMsg">Invalid Passcode</div>
     </div>
   </div>
-
 
   <!-- TOP STATUS & CONTEXT SWITCHER -->
   <header class="hud-header">
@@ -260,9 +243,7 @@
   <!-- TACTICAL POMODORO MODULE -->
   <section class="pomodoro-card">
     <div class="pomo-header">
-      <div class="section-label" style="margin-bottom:0;">
-        <span>⏱️ TACTICAL FOCUS TIMER</span>
-      </div>
+      <div class="section-label" style="margin-bottom:0;"><span>⏱️ TACTICAL FOCUS TIMER</span></div>
       <div class="pill-row" style="margin-top:0;">
         <button type="button" class="pill active" id="pomoModeFocus" onclick="setPomoMode('focus', 25)">🎯 25m Focus</button>
         <button type="button" class="pill" id="pomoModeShort" onclick="setPomoMode('short', 5)">☕ 5m Rest</button>
@@ -291,7 +272,11 @@
       <input type="text" id="quickCaptureInput" class="save-input" placeholder="Dump task or thought and hit Enter..." onkeydown="if(event.key==='Enter') submitQuickCapture()" />
       <button class="btn btn-primary" onclick="submitQuickCapture()">+ Add</button>
     </div>
-    <!-- Board Routing Pills (Shown in Personal Mode) -->
+    <!-- Board Routing Pills -->
+    <div class="pill-row" id="workBoardPills" style="display:flex;">
+      <button class="pill active" data-board="work" onclick="selectCaptureBoard('work', '💼 Work')">💼 Work</button>
+      <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
+    </div>
     <div class="pill-row" id="personalBoardPills" style="display:none;">
       <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King\'s Dominion')">🎢 King's Dom</button>
       <button class="pill" data-board="vi" onclick="selectCaptureBoard('vi', '🏝️ By The VI')">🏝️ By The VI</button>
@@ -325,52 +310,61 @@
 
   <!-- MAIN HUD PANELS -->
   <main class="hud-grid">
-    <!-- TODAY'S LOAD (WIP LIMIT 4) -->
+    <!-- TODAY'S LOAD -->
     <section class="panel">
       <div class="section-label">
         <span>⚡ TODAY'S LOAD (1 HEAVY / 1 MED / 2 LIGHT)</span>
         <span class="wip-counter" id="todayCount">0 / 4</span>
       </div>
-      <div class="task-list" id="todayList">
-        <div class="empty-state">Loading active tasks...</div>
-      </div>
+      <div class="task-list" id="todayList"><div class="empty-state">Loading active tasks...</div></div>
     </section>
 
-    <!-- INBOX TRIAGE & SANDBOX -->
+    <!-- INBOX TRIAGE -->
     <section class="panel">
       <div class="section-label">
         <span>📥 RAW INBOX TRIAGE</span>
         <span class="wip-counter" id="inboxCount">0</span>
       </div>
-      <div class="task-list" id="inboxList">
-        <div class="empty-state">Inbox clean.</div>
-      </div>
+      <div class="task-list" id="inboxList"><div class="empty-state">Inbox clean.</div></div>
     </section>
   </main>
 
-    <!-- CARD NOTE MODAL -->
+  <!-- CARD DETAIL / COMMENTS & DEPENDENCIES MODAL -->
   <div class="modal-backdrop" id="cardNoteModal">
     <div class="modal">
-      <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">💬 Card Comments</h2>
+      <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">💬 Card Details</h2>
+      
+      <!-- Native Dependency Authoring Controls -->
+      <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-bottom:12px;">
+        <div class="section-label" style="margin-bottom:6px;"><span>🔒 DEPENDENCIES & BLOCKERS</span></div>
+        <div id="modalActiveBlockers" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
+        <div style="display:flex; gap:6px;">
+          <select id="modalBlockerSelect" style="flex:1; background:#0f172a; color:#fff; border:1px solid #334155; border-radius:6px; padding:6px; font-size:0.75rem;">
+            <option value="">-- Select Prerequisite Task --</option>
+          </select>
+          <button class="btn btn-primary" id="addBlockerBtn" onclick="addCardBlocker()" style="white-space:nowrap; padding:6px 10px; font-size:0.75rem;">+ Set Blocker</button>
+        </div>
+      </div>
+
       <div class="field">
-        <label style="font-size:0.75rem; color:var(--muted); margin-bottom:4px; display:block;">Add New Comment / Note</label>
+        <label style="font-size:0.75rem; color:var(--muted); margin-bottom:4px; display:block;">Add Comment / Note</label>
         <textarea id="cardNoteInput" rows="3" placeholder="Add tactical notes, next steps, or status updates..."></textarea>
       </div>
       <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
-        <a id="cardTrelloLinkBtn" href="#" target="_blank" class="btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-size:0.75rem;" title="Manage Card Relations in Trello">🔗 Card in Trello</a>
+        <a id="cardTrelloLinkBtn" href="#" target="_blank" class="btn" style="text-decoration:none; display:inline-flex; align-items:center; gap:4px; font-size:0.75rem;">🔗 Card in Trello</a>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="closeNoteModal()">Close</button>
           <button class="btn btn-primary" id="saveNoteBtn" onclick="saveCardNote()">+ Post Comment</button>
         </div>
       </div>
       <div class="section-label" style="margin-bottom:6px;"><span>📜 RECENT COMMENTS</span></div>
-      <div id="cardCommentsHistory" style="display:flex; flex-direction:column; gap:6px; max-height:180px; overflow-y:auto; padding-right:4px;">
+      <div id="cardCommentsHistory" style="display:flex; flex-direction:column; gap:6px; max-height:160px; overflow-y:auto; padding-right:4px;">
         <div class="empty-state" style="padding:8px 0;">No comments logged yet.</div>
       </div>
     </div>
   </div>
 
-    <!-- WORK STATUS REPORT MODAL -->
+  <!-- WORK STATUS REPORT MODAL -->
   <div class="modal-backdrop" id="reportModal">
     <div class="modal" style="max-width: 600px;">
       <h2 style="font-size:1.05rem; margin-bottom:6px;">📊 Work & Growth Status Briefing</h2>
@@ -388,7 +382,7 @@
     </div>
   </div>
 
-  <!-- SETTINGS / CONFIG MODAL -->
+  <!-- SETTINGS MODAL -->
   <div class="modal-backdrop" id="settingsModal">
     <div class="modal">
       <h2>⚙️ HUD Configuration</h2>
@@ -398,13 +392,8 @@
         <textarea id="jsonPasteBox" rows="3" placeholder='{"apiKey":"...","token":"...","boards":{...}}'></textarea>
         <button class="btn btn-primary" style="margin-top:6px; width:100%;" onclick="importJsonConfig()">Import JSON Config</button>
       </div>
-            <hr style="border-color:#1e293b; margin:12px 0;" />
-      <div class="section-label" style="margin-bottom:6px;"><span>🔍 POWER-UP DIAGNOSTICS</span></div>
-      <p style="font-size:0.72rem; color:var(--muted); margin-bottom:8px;">Inspect Card Relations pluginData and test API write permissions.</p>
-      <button class="btn" style="width:100%; margin-bottom:8px;" onclick="runRelationsDiagnostic()">🔍 Inspect Card Relations & Test Write Scope</button>
-      <textarea id="diagOutputBox" rows="6" style="width:100%; font-family:monospace; font-size:0.72rem; background:#090d16; color:#94a3b8; border:1px solid #334155; border-radius:8px; padding:8px; display:none;" readonly placeholder="Diagnostic output will appear here..."></textarea>
       <hr style="border-color:#1e293b; margin:12px 0;" />
-            <div class="field">
+      <div class="field">
         <label>HUD Security Passcode (Leave blank to disable lock screen)</label>
         <input id="cfgPasscode" type="password" placeholder="Set a PIN or Passcode" />
       </div>
@@ -433,7 +422,7 @@
   };
 
   let state = {
-    context: "work", // "work" or "personal"
+    context: "work",
     manualOverride: false,
     energyFilter: "all",
     captureBoard: "work",
@@ -443,10 +432,11 @@
     activeNoteCard: null,
     boardCache: {},
     todayCards: [],
-    inboxCards: []
+    inboxCards: [],
+    allLoadedCards: []
   };
 
-    async function hashString(str) {
+  async function hashString(str) {
     if (!str) return "";
     const buf = new TextEncoder().encode(str);
     const hashBuf = await crypto.subtle.digest("SHA-256", buf);
@@ -460,16 +450,13 @@
 
   function isHudUnlocked() {
     const passHash = getSavedPasscodeHash();
-    if (!passHash) return true; // No password configured
+    if (!passHash) return true;
     return sessionStorage.getItem("TACTICAL_HUD_SESSION_AUTH") === "true";
   }
 
   function lockHud() {
     const passHash = getSavedPasscodeHash();
-    if (!passHash) {
-      alert("No passcode set. You can configure one in ⚙️ Settings.");
-      return;
-    }
+    if (!passHash) return alert("No passcode set. You can configure one in ⚙️ Settings.");
     sessionStorage.removeItem("TACTICAL_HUD_SESSION_AUTH");
     document.getElementById("passcodeInput").value = "";
     document.getElementById("lockErrorMsg").style.display = "none";
@@ -506,11 +493,9 @@
   }
 
   function loadConfig() {
-    // 1. Check external auto-loaded config.js file first
     if (window.HUD_CONFIG && window.HUD_CONFIG.apiKey && window.HUD_CONFIG.token) {
       return window.HUD_CONFIG;
     }
-    // 2. Fallback to localStorage
     try {
       return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
     } catch { return null; }
@@ -525,11 +510,10 @@
     const now = new Date();
     const day = now.getDay();
     const hour = now.getHours() + (now.getMinutes() / 60);
-    const isWeekdayWorkHours = (day >= 1 && day <= 5 && hour >= 8.5 && hour < 17.0);
-    return isWeekdayWorkHours ? "work" : "personal";
+    return (day >= 1 && day <= 5 && hour >= 8.5 && hour < 17.0) ? "work" : "personal";
   }
 
-    function applyTheme() {
+  function applyTheme() {
     const isWork = state.context === "work";
     document.documentElement.style.setProperty("--accent", isWork ? "#38bdf8" : "#a855f7");
     const modeTitleEl = document.getElementById("modeTitle");
@@ -540,14 +524,12 @@
     if (workPills) workPills.style.display = isWork ? "flex" : "none";
     if (personalPills) personalPills.style.display = isWork ? "none" : "flex";
     
-    // Set appropriate default capture target per mode
     if (isWork && (state.captureBoard !== "work" && state.captureBoard !== "growth")) {
       state.captureBoard = "work";
     } else if (!isWork && (state.captureBoard === "work" || !BOARD_LABELS[state.captureBoard])) {
       state.captureBoard = "life";
     }
 
-    // Refresh active pill state across visible container
     const currentPillContainer = isWork ? "#workBoardPills" : "#personalBoardPills";
     document.querySelectorAll(`${currentPillContainer} .pill`).forEach(btn => {
       btn.classList.toggle("active", btn.dataset.board === state.captureBoard);
@@ -591,20 +573,12 @@
     } else if (preset === "today") {
       const now = new Date();
       state.captureDue = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 17, 0, 0).toISOString();
-      if (dateInput) {
-        const mm = String(now.getMonth() + 1).padStart(2, '0');
-        const dd = String(now.getDate()).padStart(2, '0');
-        dateInput.value = `${now.getFullYear()}-${mm}-${dd}`;
-      }
+      if (dateInput) dateInput.value = new Date().toISOString().split("T")[0];
     } else if (preset === "tomorrow") {
       const now = new Date();
       const tom = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 17, 0, 0);
       state.captureDue = tom.toISOString();
-      if (dateInput) {
-        const mm = String(tom.getMonth() + 1).padStart(2, '0');
-        const dd = String(tom.getDate()).padStart(2, '0');
-        dateInput.value = `${tom.getFullYear()}-${mm}-${dd}`;
-      }
+      if (dateInput) dateInput.value = tom.toISOString().split("T")[0];
     }
     document.querySelectorAll("[data-cap-due]").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.capDue === preset);
@@ -612,16 +586,11 @@
   }
 
   function selectCaptureCustomDue(val) {
-    if (!val) {
-      selectCaptureDue("none");
-      return;
-    }
+    if (!val) return selectCaptureDue("none");
     const parts = val.split("-");
     const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 17, 0, 0);
     state.captureDue = d.toISOString();
-    document.querySelectorAll("[data-cap-due]").forEach(btn => {
-      btn.classList.remove("active");
-    });
+    document.querySelectorAll("[data-cap-due]").forEach(btn => btn.classList.remove("active"));
   }
 
   function setEnergyFilter(energy) {
@@ -645,27 +614,20 @@
   async function fetchBoardData(boardKey, boardId) {
     const [lists, cards, labels] = await Promise.all([
       trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
-      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos,shortUrl&actions=commentCard&actions_limit=5&pluginData=true"),
+      trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos,shortUrl,shortLink&actions=commentCard&actions_limit=5&pluginData=true&attachments=true"),
       trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
     ]);
     const listMap = {};
     lists.forEach(l => {
       const name = (l.name || "").toLowerCase().trim();
-      if (name.includes("inbox") || name.includes("triage") || name.includes("incoming") || name.includes("capture")) {
-        listMap.inbox = l.id;
-      } else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress")) {
-        listMap.today = l.id;
-      } else if (name.includes("waiting") || name.includes("blocked") || name.includes("pending") || name.includes("hold")) {
-        listMap.waiting = l.id;
-      } else if (name.includes("queue") || name.includes("backlog") || name.includes("next")) {
-        listMap.queue = l.id;
-      } else if (name.includes("done") || name.includes("complete") || name.includes("archive")) {
-        listMap.done = l.id;
-      }
+      if (name.includes("inbox") || name.includes("triage") || name.includes("incoming") || name.includes("capture")) listMap.inbox = l.id;
+      else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress")) listMap.today = l.id;
+      else if (name.includes("waiting") || name.includes("blocked") || name.includes("pending") || name.includes("hold")) listMap.waiting = l.id;
+      else if (name.includes("queue") || name.includes("backlog") || name.includes("next")) listMap.queue = l.id;
+      else if (name.includes("done") || name.includes("complete") || name.includes("archive")) listMap.done = l.id;
     });
 
-    // Fallbacks: If list names did not match exact keywords, fallback intelligently so operations never freeze
-    if (!listMap.inbox && lists.length > 0) listMap.inbox = lists[0].id; // 1st list is default Inbox
+    if (!listMap.inbox && lists.length > 0) listMap.inbox = lists[0].id;
     if (!listMap.today && lists.length > 1) listMap.today = lists[1].id;
 
     const labelMap = {};
@@ -674,31 +636,69 @@
     return { boardKey, listMap, cards };
   }
 
-      function extractCardRelations(card) {
-    if (!card.pluginData || !Array.isArray(card.pluginData)) {
-      return { blockedBy: [], blocks: [], parent: null, children: [] };
-    }
-    for (const p of card.pluginData) {
-      if (p.value) {
-        try {
-          const parsed = JSON.parse(p.value);
-          if (parsed && parsed["card-relations"]) {
-            return parsed["card-relations"];
-          }
-        } catch (e) {}
+  // --- UNIFIED DEPENDENCY PARSER (POWER-UP + ATTACHMENTS) ---
+  function extractCardRelations(card, allCardsMap = {}) {
+    const blockedBy = [];
+    const blocks = [];
+
+    // 1. Read Card Relations Power-Up pluginData
+    if (card.pluginData && Array.isArray(card.pluginData)) {
+      for (const p of card.pluginData) {
+        if (p.value) {
+          try {
+            const parsed = JSON.parse(p.value);
+            if (parsed && parsed["card-relations"]) {
+              const cr = parsed["card-relations"];
+              if (Array.isArray(cr.blockedBy)) {
+                cr.blockedBy.forEach(b => {
+                  if (b && b.id && !blockedBy.some(x => x.id === b.id)) {
+                    blockedBy.push({ id: b.id, name: b.name || "Prerequisite Task", isAttachment: false });
+                  }
+                });
+              }
+              if (Array.isArray(cr.blocks)) blocks.push(...cr.blocks);
+            }
+          } catch (e) {}
+        }
       }
     }
-    return { blockedBy: [], blocks: [], parent: null, children: [] };
+
+    // 2. Read Native Card Attachments (Links pointing to other Trello cards)
+    if (card.attachments && Array.isArray(card.attachments)) {
+      for (const att of card.attachments) {
+        const url = att.url || "";
+        const name = att.name || "";
+        if (url.includes("trello.com/c/")) {
+          const m = url.match(/trello\.com\/c\/([a-zA-Z0-9]+)/);
+          if (m) {
+            const shortLinkOrId = m[1];
+            const target = allCardsMap[shortLinkOrId] || Object.values(allCardsMap).find(c => c.shortLink === shortLinkOrId || c.id === shortLinkOrId);
+            const targetId = target ? target.id : shortLinkOrId;
+            const targetName = target ? target.name : name.replace(/^🔒?\s*Blocked by:\s*/i, "");
+
+            if (!blockedBy.some(x => x.id === targetId)) {
+              blockedBy.push({
+                id: targetId,
+                name: targetName,
+                attachmentId: att.id,
+                isAttachment: true
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return { blockedBy, blocks };
   }
 
   function getUnresolvedBlockers(card, allCardsMap) {
-    const rels = extractCardRelations(card);
+    const rels = extractCardRelations(card, allCardsMap);
     if (!rels.blockedBy || rels.blockedBy.length === 0) return [];
     
     const activeBlockers = [];
     for (const b of rels.blockedBy) {
-      const blockerCard = allCardsMap[b.id];
-      // If blocker card is found and NOT in a done list, it's an active blocker
+      const blockerCard = allCardsMap[b.id] || Object.values(allCardsMap).find(c => c.shortLink === b.id);
       if (blockerCard && !blockerCard.isDone) {
         activeBlockers.push(b.name || blockerCard.name);
       }
@@ -707,20 +707,19 @@
   }
 
   async function manageCardDependencies(results) {
-    // 1. Build global card map across all active boards
     const allCardsMap = {};
     for (const { listMap, cards } of results) {
       for (const c of cards) {
         allCardsMap[c.id] = {
           id: c.id,
           name: c.name,
+          shortLink: c.shortLink,
           idList: c.idList,
           isDone: (c.idList === listMap.done)
         };
       }
     }
 
-    // 2. Process each board for dependency-driven list transitions
     for (const { boardKey, listMap, cards } of results) {
       if (!listMap.queue || !listMap.waiting) continue;
 
@@ -733,7 +732,6 @@
             await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.waiting}`);
             card.idList = listMap.waiting;
             if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.waiting;
-            console.log(`[Dependency Engine] Moved "${card.name}" to Waiting (Blocked by: ${blockers.join(", ")})`);
           } catch (e) {
             console.error("Failed to move blocked card to Waiting:", card.id, e);
           }
@@ -743,17 +741,14 @@
       // Phase B: Move resolved cards from Waiting -> Queue
       const waitingCards = cards.filter(c => c.idList === listMap.waiting);
       for (const card of waitingCards) {
-        const rels = extractCardRelations(card);
-        // Only target cards that have explicit Card Relations dependencies
+        const rels = extractCardRelations(card, allCardsMap);
         if (rels.blockedBy && rels.blockedBy.length > 0) {
           const blockers = getUnresolvedBlockers(card, allCardsMap);
           if (blockers.length === 0) {
-            // All blockers are resolved (in Done)! Return card to Queue
             try {
               await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
               card.idList = listMap.queue;
               if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
-              console.log(`[Dependency Engine] Blockers cleared for "${card.name}". Returned to Queue.`);
             } catch (e) {
               console.error("Failed to return unblocked card to Queue:", card.id, e);
             }
@@ -765,14 +760,13 @@
 
   async function autoPromoteCards(results) {
     let promotedAny = false;
-
-    // Build global card lookup map to resolve cross-card blockers
     const allCardsMap = {};
     for (const { listMap, cards } of results) {
       for (const c of cards) {
         allCardsMap[c.id] = {
           id: c.id,
           name: c.name,
+          shortLink: c.shortLink,
           idList: c.idList,
           isDone: (c.idList === listMap.done)
         };
@@ -800,31 +794,17 @@
       let totalSlots = slots.red + slots.yellow + slots.green;
       if (totalSlots === 0 || queueCards.length === 0) continue;
 
-      // Sort queue cards:
-      // 1. Due Date: Cards with due date come first, sorted ascending (soonest due date first).
-      // 2. FIFO: Tie-breaker / cards without due dates sort by creation timestamp (oldest first).
-      // Note: Trello card IDs are 24-char BSON ObjectIDs where the first 8 hex chars represent creation epoch seconds.
       const sortedQueue = [...queueCards].sort((a, b) => {
         const dueA = a.due ? new Date(a.due).getTime() : Infinity;
         const dueB = b.due ? new Date(b.due).getTime() : Infinity;
-
-        if (dueA !== dueB) {
-          return dueA - dueB; // Earlier due date comes first
-        }
-
-        const createdAtA = parseInt(a.id.substring(0, 8), 16);
-        const createdAtB = parseInt(b.id.substring(0, 8), 16);
-        return createdAtA - createdAtB; // Oldest created card comes first (FIFO)
+        if (dueA !== dueB) return dueA - dueB;
+        return parseInt(a.id.substring(0, 8), 16) - parseInt(b.id.substring(0, 8), 16);
       });
 
       for (const card of sortedQueue) {
         if (totalSlots === 0) break;
-
-        // Dependency Gate: If card is blocked by an incomplete task, DO NOT promote!
         const blockers = getUnresolvedBlockers(card, allCardsMap);
-        if (blockers.length > 0) {
-          continue; // Gated: Waiting on prerequisite task
-        }
+        if (blockers.length > 0) continue;
 
         const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
         if (slots[col] && slots[col] > 0) {
@@ -846,13 +826,8 @@
   async function syncHud() {
     if (!checkLockGate()) return;
     const cfg = loadConfig();
-    if (!cfg || !cfg.apiKey || !cfg.token) {
-      openSettings();
-      return;
-    }
-    if (!state.manualOverride) {
-      state.context = determineAutoContext(cfg);
-    }
+    if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
+    if (!state.manualOverride) state.context = determineAutoContext(cfg);
     applyTheme();
 
     const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
@@ -861,14 +836,12 @@
     try {
       const results = await Promise.all(validTargets.map(k => fetchBoardData(k, cfg.boards[k])));
       
-      // 1. Dependency Engine: Route blocked cards to Waiting, and return resolved cards to Queue
       await manageCardDependencies(results);
-
-      // 2. Auto-promote queue cards into open energy slots (1 Heavy / 1 Med / 2 Light)
       await autoPromoteCards(results);
 
       state.todayCards = [];
       state.inboxCards = [];
+      state.allLoadedCards = [];
       state.saveStateCardId = null;
 
       const allCardsMap = {};
@@ -877,6 +850,7 @@
           allCardsMap[c.id] = {
             id: c.id,
             name: c.name,
+            shortLink: c.shortLink,
             idList: c.idList,
             isDone: (c.idList === listMap.done)
           };
@@ -901,11 +875,11 @@
               }))
             : [];
           const latestNote = commentsList.length > 0 ? commentsList[0].text : (card.desc || "");
-          const rels = extractCardRelations(card);
+          const rels = extractCardRelations(card, allCardsMap);
           const activeBlockers = [];
           if (rels.blockedBy && rels.blockedBy.length > 0) {
             for (const b of rels.blockedBy) {
-              const blockerCard = allCardsMap[b.id];
+              const blockerCard = allCardsMap[b.id] || Object.values(allCardsMap).find(c => c.shortLink === b.id);
               if (blockerCard && !blockerCard.isDone) {
                 activeBlockers.push(b.name || blockerCard.name);
               }
@@ -924,8 +898,10 @@
             labels: card.labels || [],
             shortUrl: card.shortUrl || `https://trello.com/c/${card.id}`,
             relations: rels,
-            blockers: activeBlockers
+            blockers: activeBlockers,
+            attachments: card.attachments || []
           };
+          state.allLoadedCards.push(item);
           if (card.idList === listMap.today) state.todayCards.push(item);
           else if (card.idList === listMap.inbox) state.inboxCards.push(item);
         });
@@ -971,7 +947,7 @@
           ${noteSnippet}
         </div>
         <div class="task-actions">
-          <button class="icon-btn" title="Comments & Notes" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
+          <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
           <button class="icon-btn" title="Move to Waiting" onclick="moveCard('${c.id}','${c.boardKey}','waiting')">⏳</button>
           <button class="icon-btn done" title="Complete Task" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
         </div>
@@ -997,6 +973,7 @@
           </div>
         </div>
         <div class="task-actions">
+          <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
           <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
           <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
           <button class="icon-btn done" title="3-Min Kill (Done)" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
@@ -1029,9 +1006,7 @@
     }
 
     let dueParam = "";
-    if (state.captureDue) {
-      dueParam = `&due=${encodeURIComponent(state.captureDue)}`;
-    }
+    if (state.captureDue) dueParam = `&due=${encodeURIComponent(state.captureDue)}`;
 
     input.value = "";
     selectCaptureDue("none");
@@ -1041,19 +1016,13 @@
 
   async function setCardEnergy(cardId, boardKey, energyColor) {
     const cache = state.boardCache[boardKey];
-    if (!cache || !cache.labelMap || !cache.labelMap[energyColor]) {
-      alert(`Could not find ${energyColor} energy label on the board.`);
-      return;
-    }
+    if (!cache || !cache.labelMap || !cache.labelMap[energyColor]) return alert(`Could not find ${energyColor} energy label.`);
     const targetLabelId = cache.labelMap[energyColor];
-    const card = state.inboxCards.find(c => c.id === cardId) || state.todayCards.find(c => c.id === cardId);
+    const card = state.allLoadedCards.find(c => c.id === cardId);
     const existingLabels = (card && card.labels) ? card.labels : [];
     
-    // Preserve any non-energy labels (e.g., recurrence tags) and replace energy label
     const energyColors = ["red", "yellow", "green"];
-    const otherLabelIds = existingLabels
-      .filter(l => !energyColors.includes(l.color))
-      .map(l => l.id);
+    const otherLabelIds = existingLabels.filter(l => !energyColors.includes(l.color)).map(l => l.id);
     const newLabelIds = [...otherLabelIds, targetLabelId].join(",");
 
     try {
@@ -1062,7 +1031,6 @@
         card.energy = energyColor;
         card.labels = [...existingLabels.filter(l => !energyColors.includes(l.color)), { id: targetLabelId, color: energyColor }];
       }
-      // Re-sync: Because of board automation rules, tagging an inbox item will automatically route it to Queue/Today!
       syncHud();
     } catch (e) {
       console.error(e);
@@ -1077,7 +1045,7 @@
     syncHud();
   }
 
-    function renderModalComments(comments) {
+  function renderModalComments(comments) {
     const historyContainer = document.getElementById("cardCommentsHistory");
     if (!comments || comments.length === 0) {
       historyContainer.innerHTML = `<div class="empty-state" style="padding:8px 0;">No comments logged yet.</div>`;
@@ -1094,19 +1062,46 @@
     }).join("");
   }
 
+  function renderModalBlockers(card) {
+    const container = document.getElementById("modalActiveBlockers");
+    const select = document.getElementById("modalBlockerSelect");
+    
+    // 1. Populate active blockers
+    const rels = card.relations || { blockedBy: [] };
+    if (!rels.blockedBy || rels.blockedBy.length === 0) {
+      container.innerHTML = `<div style="font-size:0.72rem; color:var(--muted);">No active blockers. This card is actionable.</div>`;
+    } else {
+      container.innerHTML = rels.blockedBy.map(b => {
+        const removeBtn = b.isAttachment
+          ? `<button class="btn" style="padding:1px 6px; font-size:0.65rem; color:var(--high);" onclick="removeAttachmentBlocker('${card.id}', '${b.attachmentId}')">✖</button>`
+          : `<span style="font-size:0.62rem; color:var(--muted);">(Power-Up)</span>`;
+        return `
+          <div style="display:flex; justify-content:space-between; align-items:center; background:#0f172a; padding:4px 8px; border-radius:4px; font-size:0.72rem;">
+            <span>🔒 ${escapeHtml(b.name)}</span>
+            ${removeBtn}
+          </div>
+        `;
+      }).join("");
+    }
+
+    // 2. Populate blocker dropdown with other active cards
+    const availableCards = state.allLoadedCards.filter(c => c.id !== card.id);
+    select.innerHTML = `<option value="">-- Select Prerequisite Task --</option>` +
+      availableCards.map(c => `<option value="${c.id}">${escapeHtml(c.boardName)}: ${escapeHtml(c.name)}</option>`).join("");
+  }
+
   function openNoteModal(cardId, boardKey) {
-    const card = state.todayCards.find(c => c.id === cardId);
+    const card = state.allLoadedCards.find(c => c.id === cardId);
     if (!card) return;
     state.activeNoteCard = { id: cardId, boardKey };
     document.getElementById("noteModalCardTitle").textContent = `💬 ${card.name}`;
     const trelloLinkBtn = document.getElementById("cardTrelloLinkBtn");
-    if (trelloLinkBtn) {
-      trelloLinkBtn.href = card.shortUrl || `https://trello.com/c/${card.id}`;
-    }
+    if (trelloLinkBtn) trelloLinkBtn.href = card.shortUrl || `https://trello.com/c/${card.id}`;
+    
     document.getElementById("cardNoteInput").value = "";
     renderModalComments(card.comments || []);
+    renderModalBlockers(card);
     document.getElementById("cardNoteModal").classList.add("open");
-    document.getElementById("cardNoteInput").focus();
   }
 
   function closeNoteModal() {
@@ -1114,27 +1109,54 @@
     state.activeNoteCard = null;
   }
 
+  async function addCardBlocker() {
+    if (!state.activeNoteCard) return;
+    const cardId = state.activeNoteCard.id;
+    const select = document.getElementById("modalBlockerSelect");
+    const targetCardId = select.value;
+    if (!targetCardId) return alert("Please select a prerequisite task.");
+
+    const targetCard = state.allLoadedCards.find(c => c.id === targetCardId);
+    if (!targetCard) return alert("Target card not found.");
+
+    const btn = document.getElementById("addBlockerBtn");
+    btn.textContent = "Setting...";
+    try {
+      const attName = `🔒 Blocked by: ${targetCard.name}`;
+      await trelloFetch(`/cards/${cardId}/attachments`, "POST", `&url=${encodeURIComponent(targetCard.shortUrl)}&name=${encodeURIComponent(attName)}`);
+      closeNoteModal();
+      await syncHud();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to attach blocker to card.");
+    } finally {
+      btn.textContent = "+ Set Blocker";
+    }
+  }
+
+  async function removeAttachmentBlocker(cardId, attachmentId) {
+    if (!confirm("Remove this dependency lock?")) return;
+    try {
+      await trelloFetch(`/cards/${cardId}/attachments/${attachmentId}`, "DELETE");
+      closeNoteModal();
+      await syncHud();
+    } catch (e) {
+      console.error(e);
+      alert("Failed to remove dependency attachment.");
+    }
+  }
+
   async function saveCardNote() {
     if (!state.activeNoteCard) return;
     const { id } = state.activeNoteCard;
     const noteText = document.getElementById("cardNoteInput").value.trim();
-    if (!noteText) {
-      closeNoteModal();
-      return;
-    }
+    if (!noteText) return closeNoteModal();
     const saveBtn = document.getElementById("saveNoteBtn");
     saveBtn.textContent = "Posting...";
     try {
-      // Post comment directly to Trello card actions API
       const res = await trelloFetch(`/cards/${id}/actions/comments`, "POST", `&text=${encodeURIComponent(noteText)}`);
-      
-      const newComment = {
-        id: res.id || Date.now().toString(),
-        text: noteText,
-        date: res.date || new Date().toISOString()
-      };
-
-      const target = state.todayCards.find(c => c.id === id);
+      const newComment = { id: res.id || Date.now().toString(), text: noteText, date: res.date || new Date().toISOString() };
+      const target = state.allLoadedCards.find(c => c.id === id);
       if (target) {
         target.comments = [newComment, ...(target.comments || [])];
         target.notes = noteText;
@@ -1149,17 +1171,14 @@
     }
   }
 
-    async function openReportModal() {
+  async function openReportModal() {
     const cfg = loadConfig();
     const targetBoards = [
       { key: "work", name: "💼 Work", id: (cfg && cfg.boards && cfg.boards.work) },
       { key: "growth", name: "🎓 Growth", id: (cfg && cfg.boards && cfg.boards.growth) }
     ].filter(b => b.id);
 
-    if (targetBoards.length === 0) {
-      alert("Neither Work nor Growth board ID is configured.");
-      return;
-    }
+    if (targetBoards.length === 0) return alert("Neither Work nor Growth board ID is configured.");
 
     const modal = document.getElementById("reportModal");
     const contentBox = document.getElementById("reportContent");
@@ -1201,9 +1220,7 @@
               const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
                 ? c.actions[0].data.text
                 : (c.desc && c.desc.trim() ? c.desc.trim() : "");
-              if (latestComment) {
-                report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
-              }
+              if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
             });
             report += `\n`;
           }
@@ -1223,18 +1240,14 @@
               const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
                 ? c.actions[0].data.text
                 : (c.desc && c.desc.trim() ? c.desc.trim() : "");
-              if (latestComment) {
-                report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
-              }
+              if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
             });
             report += `\n`;
           }
         });
       }
 
-      report += `=========================================\n`;
-      report += `Generated via Tactical Focus HUD\n`;
-
+      report += `=========================================\nGenerated via Tactical Focus HUD\n`;
       contentBox.value = report;
     } catch (e) {
       console.error(e);
@@ -1242,112 +1255,17 @@
     }
   }
 
-  function closeReportModal() {
-    document.getElementById("reportModal").classList.remove("open");
-  }
-
+  function closeReportModal() { document.getElementById("reportModal").classList.remove("open"); }
   function copyReportText() {
-    const text = document.getElementById("reportContent").value;
-    navigator.clipboard.writeText(text).then(() => {
-      alert("Briefing copied to clipboard!");
-    }).catch(() => {
-      alert("Unable to copy. You can manually select and copy the text.");
-    });
+    navigator.clipboard.writeText(document.getElementById("reportContent").value)
+      .then(() => alert("Briefing copied to clipboard!"))
+      .catch(() => alert("Select and copy text manually."));
   }
-
   function emailReport() {
     const report = document.getElementById("reportContent").value;
     const recipient = (window.HUD_CONFIG && window.HUD_CONFIG.reportEmail) || "charlesabrown0505@gmail.com";
     const dateStr = new Date().toISOString().split("T")[0];
-    const subject = encodeURIComponent(`Work & Growth Status Report - ${dateStr}`);
-    const body = encodeURIComponent(report);
-    window.location.href = `mailto:${recipient}?subject=${subject}&body=${body}`;
-  }
-
-    async function runRelationsDiagnostic() {
-    const cfg = loadConfig();
-    const out = document.getElementById("diagOutputBox");
-    out.style.display = "block";
-    out.value = "Scanning boards for cards with Card Relations pluginData...\n";
-
-    if (!cfg || !cfg.apiKey || !cfg.token || !cfg.boards) {
-      out.value += "ERROR: Missing API credentials or boards in config.\n";
-      return;
-    }
-
-    const boardEntries = Object.entries(cfg.boards).filter(([k, id]) => id && !id.startsWith("YOUR_"));
-    if (boardEntries.length === 0) {
-      out.value += "ERROR: No valid board IDs found in config.\n";
-      return;
-    }
-
-    let foundAnyPlugin = false;
-
-    for (const [key, boardId] of boardEntries) {
-      out.value += `\n[Board: ${key}] Checking /boards/${boardId}/cards?pluginData=true...\n`;
-      try {
-        const cards = await trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,shortLink&pluginData=true");
-        const cardsWithData = cards.filter(c => c.pluginData && c.pluginData.length > 0);
-
-        if (cardsWithData.length === 0) {
-          out.value += `-> No cards on board '${key}' currently have pluginData.\n`;
-          continue;
-        }
-
-        foundAnyPlugin = true;
-        out.value += `-> Found ${cardsWithData.length} card(s) with pluginData!\n`;
-
-        for (const c of cardsWithData) {
-          out.value += `\n-----------------------------------------\n`;
-          out.value += `CARD: "${c.name}" (ID: ${c.id})\n`;
-          
-          for (const p of c.pluginData) {
-            out.value += `  idPlugin: ${p.idPlugin}\n`;
-            out.value += `  scope: ${p.scope}\n`;
-            out.value += `  Raw Value: ${p.value}\n`;
-
-            // Try formatting value as JSON
-            try {
-              const parsed = JSON.parse(p.value);
-              out.value += `  Parsed Schema: ${JSON.stringify(parsed, null, 2).replace(/\n/g, "\n  ")}\n`;
-            } catch (e) {
-              out.value += `  (Value is not raw JSON)\n`;
-            }
-
-            // Test Write Permission Probe
-            out.value += `\n  [Write Probe] Testing PUT /cards/${c.id}/pluginData/${p.idPlugin}...\n`;
-            try {
-              const testUrl = `https://api.trello.com/1/cards/${c.id}/pluginData/${p.idPlugin}?key=${cfg.apiKey}&token=${cfg.token}`;
-              const res = await fetch(testUrl, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ value: p.value }) // echo back existing value safely
-              });
-
-              if (res.ok) {
-                out.value += `  -> WRITE PROBE RESULT: SUCCESS (HTTP ${res.status})! Direct API writing to this Power-Up is PERMITTED!\n`;
-              } else {
-                const errText = await res.text();
-                out.value += `  -> WRITE PROBE RESULT: RESTRICTED (HTTP ${res.status}): ${errText}\n`;
-                out.value += `     (Trello blocks public API writing to third-party plugin scopes).\n`;
-              }
-            } catch (err) {
-              out.value += `  -> WRITE PROBE ERROR: ${err.message}\n`;
-            }
-          }
-        }
-      } catch (err) {
-        out.value += `-> Failed to fetch board '${key}': ${err.message}\n`;
-      }
-    }
-
-    if (!foundAnyPlugin) {
-      out.value += `\nSUMMARY:\nNo cards with Card Relations pluginData detected across scanned boards.\n`;
-      out.value += `Tip: Open Trello, add a dependency relation to at least one card on your board using Card Relations, then tap this button again.\n`;
-    } else {
-      out.value += `\n-----------------------------------------\n`;
-      out.value += `DIAGNOSTIC COMPLETE.\n`;
-    }
+    window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Work & Growth Status Report - ${dateStr}`)}&body=${encodeURIComponent(report)}`;
   }
 
   function openSettings() {
@@ -1363,9 +1281,7 @@
     document.getElementById("settingsModal").classList.add("open");
   }
 
-  function closeSettings() {
-    document.getElementById("settingsModal").classList.remove("open");
-  }
+  function closeSettings() { document.getElementById("settingsModal").classList.remove("open"); }
 
   function importJsonConfig() {
     try {
@@ -1373,9 +1289,7 @@
       localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
       closeSettings();
       syncHud();
-    } catch (e) {
-      alert("Invalid JSON string. Copy the exact configuration block.");
-    }
+    } catch (e) { alert("Invalid JSON string."); }
   }
 
   async function saveSettings() {
@@ -1411,14 +1325,8 @@
     return str.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
   }
 
-    // --- TACTICAL POMODORO ENGINE ---
-  let pomoState = {
-    mode: "focus", // "focus", "short", "long"
-    totalSeconds: 25 * 60,
-    remainingSeconds: 25 * 60,
-    timerId: null,
-    isRunning: false
-  };
+  // --- TACTICAL POMODORO ENGINE ---
+  let pomoState = { mode: "focus", totalSeconds: 25 * 60, remainingSeconds: 25 * 60, timerId: null, isRunning: false };
 
   function playPomoChime(type) {
     try {
@@ -1427,101 +1335,75 @@
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-
       const now = ctx.currentTime;
       if (type === "complete") {
-        // High dual-tone tactical alert
-        osc.frequency.setValueAtTime(587.33, now); // D5
-        osc.frequency.setValueAtTime(880, now + 0.15); // A5
+        osc.frequency.setValueAtTime(587.33, now);
+        osc.frequency.setValueAtTime(880, now + 0.15);
         gain.gain.setValueAtTime(0.2, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
         osc.start(now);
         osc.stop(now + 0.5);
       } else {
-        // Subtle tick
         osc.frequency.setValueAtTime(440, now);
         gain.gain.setValueAtTime(0.08, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.08);
         osc.start(now);
         osc.stop(now + 0.08);
       }
-    } catch (e) {
-      // AudioContext not allowed before user gesture or unsupported
-    }
+    } catch (e) {}
   }
 
   function updatePomoDisplay() {
     const min = Math.floor(pomoState.remainingSeconds / 60);
     const sec = pomoState.remainingSeconds % 60;
-    const formatted = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     const displayEl = document.getElementById("pomoDisplay");
     const progressEl = document.getElementById("pomoProgressBar");
-    
     if (displayEl) {
-      displayEl.textContent = formatted;
-      const isBreak = pomoState.mode !== "focus";
-      displayEl.classList.toggle("break-mode", isBreak);
+      displayEl.textContent = `${String(min).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+      displayEl.classList.toggle("break-mode", pomoState.mode !== "focus");
     }
-
     if (progressEl) {
       const elapsed = pomoState.totalSeconds - pomoState.remainingSeconds;
-      const pct = (elapsed / pomoState.totalSeconds) * 100;
-      progressEl.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+      progressEl.style.width = `${Math.min(100, Math.max(0, (elapsed / pomoState.totalSeconds) * 100))}%`;
       progressEl.classList.toggle("break-mode", pomoState.mode !== "focus");
     }
   }
 
   function setPomoMode(mode, minutes) {
-    if (pomoState.timerId) {
-      clearInterval(pomoState.timerId);
-      pomoState.timerId = null;
-    }
+    if (pomoState.timerId) clearInterval(pomoState.timerId);
     pomoState.isRunning = false;
     pomoState.mode = mode;
     pomoState.totalSeconds = minutes * 60;
     pomoState.remainingSeconds = minutes * 60;
-
     const toggleBtn = document.getElementById("pomoToggleBtn");
     if (toggleBtn) toggleBtn.textContent = "▶ Start";
-
     document.querySelectorAll("[id^='pomoMode']").forEach(btn => btn.classList.remove("active"));
     if (mode === "focus") document.getElementById("pomoModeFocus").classList.add("active");
     else if (mode === "short") document.getElementById("pomoModeShort").classList.add("active");
     else if (mode === "long") document.getElementById("pomoModeLong").classList.add("active");
-
     updatePomoDisplay();
   }
 
   function togglePomoTimer() {
     const toggleBtn = document.getElementById("pomoToggleBtn");
     if (pomoState.isRunning) {
-      // Pause
       clearInterval(pomoState.timerId);
-      pomoState.timerId = null;
       pomoState.isRunning = false;
       if (toggleBtn) toggleBtn.textContent = "▶ Resume";
     } else {
-      // Start / Resume
       pomoState.isRunning = true;
       if (toggleBtn) toggleBtn.textContent = "⏸ Pause";
       playPomoChime("start");
-
       pomoState.timerId = setInterval(() => {
         if (pomoState.remainingSeconds > 0) {
           pomoState.remainingSeconds--;
           updatePomoDisplay();
         } else {
-          // Timer finished
           clearInterval(pomoState.timerId);
-          pomoState.timerId = null;
           pomoState.isRunning = false;
           if (toggleBtn) toggleBtn.textContent = "▶ Start";
           playPomoChime("complete");
-
-          if ("vibrate" in navigator) {
-            navigator.vibrate([200, 100, 200, 100, 300]);
-          }
-
+          if ("vibrate" in navigator) navigator.vibrate([200, 100, 200, 100, 300]);
           if (pomoState.mode === "focus") {
             alert("🎯 Focus block complete! Take a breather.");
             setPomoMode("short", 5);
@@ -1535,10 +1417,7 @@
   }
 
   function resetPomoTimer() {
-    if (pomoState.timerId) {
-      clearInterval(pomoState.timerId);
-      pomoState.timerId = null;
-    }
+    if (pomoState.timerId) clearInterval(pomoState.timerId);
     pomoState.isRunning = false;
     pomoState.remainingSeconds = pomoState.totalSeconds;
     const toggleBtn = document.getElementById("pomoToggleBtn");
