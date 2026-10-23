@@ -16,6 +16,7 @@ let state = {
   captureBoard: "work",
   captureEnergy: "none",
   captureDue: "",
+  captureRecur: "none",
   saveStateCardId: null,
   activeNoteCard: null,
   boardCache: {},
@@ -85,6 +86,13 @@ function selectCaptureEnergy(color) {
   state.captureEnergy = color;
   document.querySelectorAll("[data-cap-energy]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.capEnergy === color);
+  });
+}
+
+function selectCaptureRecur(cadence) {
+  state.captureRecur = cadence;
+  document.querySelectorAll("[data-cap-recur]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.capRecur === cadence);
   });
 }
 
@@ -371,6 +379,60 @@ function renderModalComments(comments) {
   }).join("");
 }
 
+function getCardRecurCadence(card) {
+  if (!card || !card.labels) return "none";
+  for (const lb of card.labels) {
+    const name = (lb.name || "").toLowerCase();
+    if (name.includes("daily")) return "daily";
+    if (name.includes("bi-weekly") || name.includes("biweekly")) return "biweekly";
+    if (name.includes("weekly")) return "weekly";
+    if (name.includes("monthly")) return "monthly";
+  }
+  return "none";
+}
+
+function updateModalRecurPills(card) {
+  const currentRecur = getCardRecurCadence(card);
+  const map = {
+    none: "modalRecurNone",
+    daily: "modalRecurDaily",
+    weekly: "modalRecurWeekly",
+    biweekly: "modalRecurBiweekly",
+    monthly: "modalRecurMonthly"
+  };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (el) el.classList.toggle("active", k === currentRecur);
+  });
+}
+
+async function setCardRecurCadence(newCadence) {
+  if (!state.activeNoteCard) return;
+  const { id, boardKey } = state.activeNoteCard;
+  const cache = state.boardCache[boardKey];
+  const card = state.allLoadedCards.find(c => c.id === id);
+  if (!cache || !card) return;
+
+  const recurKeywords = ["daily", "weekly", "bi-weekly", "biweekly", "monthly"];
+  const preservedLabelIds = (card.labels || [])
+    .filter(l => !recurKeywords.some(kw => (l.name || "").toLowerCase().includes(kw)))
+    .map(l => l.id);
+
+  if (newCadence !== "none" && cache.recurLabelMap && cache.recurLabelMap[newCadence]) {
+    preservedLabelIds.push(cache.recurLabelMap[newCadence]);
+  }
+
+  try {
+    await trelloFetch(`/cards/${id}`, "PUT", `&idLabels=${preservedLabelIds.join(",")}`);
+    await syncHud();
+    const updated = state.allLoadedCards.find(c => c.id === id);
+    if (updated) updateModalRecurPills(updated);
+  } catch (e) {
+    console.error("Failed to update card recurrence cadence:", e);
+    alert("Failed to update recurrence setting.");
+  }
+}
+
 function openNoteModal(cardId, boardKey) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
   if (!card) return;
@@ -382,6 +444,7 @@ function openNoteModal(cardId, boardKey) {
   document.getElementById("cardNoteInput").value = "";
   renderModalComments(card.comments || []);
   renderModalBlockers(card);
+  updateModalRecurPills(card);
   document.getElementById("cardNoteModal").classList.add("open");
 }
 
@@ -398,19 +461,23 @@ async function submitQuickCapture() {
   const cache = state.boardCache[targetBoardKey];
   if (!cache || !cache.listMap.inbox) return alert("Target Inbox list not loaded.");
 
-  let labelParam = "";
+  let labelIds = [];
   if (state.captureEnergy !== "none" && cache.labelMap[state.captureEnergy]) {
-    labelParam = `&idLabels=${cache.labelMap[state.captureEnergy]}`;
+    labelIds.push(cache.labelMap[state.captureEnergy]);
+  }
+  if (state.captureRecur !== "none" && cache.recurLabelMap && cache.recurLabelMap[state.captureRecur]) {
+    labelIds.push(cache.recurLabelMap[state.captureRecur]);
   }
 
-  let dueParam = "";
-  if (state.captureDue) dueParam = `&due=${encodeURIComponent(state.captureDue)}`;
+  let labelParam = labelIds.length > 0 ? `&idLabels=${labelIds.join(",")}` : "";
+  let dueParam = state.captureDue ? `&due=${encodeURIComponent(state.captureDue)}` : "";
 
   const blockerSelect = document.getElementById("quickCaptureBlockerSelect");
   const blockerId = blockerSelect ? blockerSelect.value : "";
 
   input.value = "";
   selectCaptureDue("none");
+  selectCaptureRecur("none");
   if (blockerSelect) blockerSelect.value = "";
 
   try {
