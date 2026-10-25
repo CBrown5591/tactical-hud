@@ -29,16 +29,26 @@ let state = {
 
 function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
-  const isOff = calData && calData.isWorkOffDay;
+  const now = new Date();
+  const day = now.getDay();
+  const isWeekend = (day === 0 || day === 6); // 0 = Sunday, 6 = Saturday
+  const isOff = (calData && calData.isWorkOffDay) || isWeekend;
+
   const bookedHours = isWork
     ? (calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0)
     : (calData ? (calData.bookedHours ?? 0) : 0);
 
-  // If manually viewing Work HUD on a scheduled off-day, lock all work slots to 0
+  // Option A: If viewing Work HUD on a weekend or off-day (vacation, PTO, RDO), lock capacity to 0
   if (isWork && isOff) {
+    let offLabel = "🌴 SCHEDULED OFF DAY (WORK LOCKED)";
+    if (isWeekend) {
+      offLabel = "🌴 WEEKEND (WORK LOCKED)";
+    } else if (calData && calData.offDayReason) {
+      offLabel = `🌴 ${calData.offDayReason.toUpperCase()} (WORK LOCKED)`;
+    }
     return {
       red: 0, yellow: 0, green: 0, total: 0,
-      label: "🌴 SCHEDULED OFF DAY (WORK LOCKED)"
+      label: offLabel
     };
   }
 
@@ -66,7 +76,7 @@ function determineAutoContext(cfg, calTelemetry = null) {
     return params.get("context");
   }
 
-  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO, Vacation), automatically route to Personal HUD
   if (calTelemetry && calTelemetry.isWorkOffDay) {
     return "personal";
   }
@@ -243,12 +253,12 @@ async function syncHud() {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
 
-  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day") and work-hour meeting load
+  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day", PTO, Vacation) and meeting load
   const calData = await fetchCalendarTelemetry();
   if (!state.manualOverride) state.context = determineAutoContext(cfg, calData);
   applyTheme();
 
-  // Re-calculate energy quotas for the resolved context
+  // Re-calculate energy quotas for the resolved context (handles Option A weekend/vacation lock)
   state.energyQuotas = calculateEnergyQuotas(calData);
 
   const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
@@ -596,9 +606,15 @@ async function fetchCalendarTelemetry() {
     }
 
     if (badge) {
-      if (data.isWorkOffDay && state.context === "work") {
+      const now = new Date();
+      const isWeekend = (now.getDay() === 0 || now.getDay() === 6);
+      if ((data.isWorkOffDay || isWeekend) && state.context === "work") {
         badge.className = "cal-badge-busy";
-        badge.textContent = "🌴 Work Locked (Off Day)";
+        if (isWeekend) {
+          badge.textContent = "🌴 Work Locked (Weekend)";
+        } else {
+          badge.textContent = `🌴 Work Locked (${data.offDayReason || "Off Day"})`;
+        }
       } else if (data.nextEvent) {
         if (data.nextEvent.status === "IN PROGRESS") {
           badge.className = "cal-badge-busy";
