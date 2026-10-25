@@ -22,15 +22,55 @@ let state = {
   boardCache: {},
   todayCards: [],
   inboxCards: [],
-  allLoadedCards: []
+  allLoadedCards: [],
+  calendarTelemetry: { bookedHours: 0, eventCount: 0, nextEvent: null },
+  energyQuotas: { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" }
 };
 
-function determineAutoContext(cfg) {
+function calculateEnergyQuotas(calData = null) {
+  const isWork = state.context === "work";
+  const isOff = calData && calData.isWorkOffDay;
+  const bookedHours = isWork
+    ? (calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0)
+    : (calData ? (calData.bookedHours ?? 0) : 0);
+
+  // If manually viewing Work HUD on a scheduled off-day, lock all work slots to 0
+  if (isWork && isOff) {
+    return {
+      red: 0, yellow: 0, green: 0, total: 0,
+      label: "🌴 SCHEDULED OFF DAY (WORK LOCKED)"
+    };
+  }
+
+  let maxRed = 1;
+  let maxYellow = 1;
+  let maxGreen = 2;
+
+  if (bookedHours > 6.0) {
+    maxRed = 0; maxYellow = 0; maxGreen = 2; // Locked / high meeting load
+  } else if (bookedHours > 4.0) {
+    maxRed = 0; maxYellow = 1; maxGreen = 2; // Heavy meeting day (3 tasks max)
+  } else if (bookedHours > 2.0) {
+    maxRed = 0; maxYellow = 2; maxGreen = 2; // Moderate meeting load (convert Heavy to Medium)
+  }
+
+  const total = maxRed + maxYellow + maxGreen;
+  const label = `${maxRed} HEAVY / ${maxYellow} MED / ${maxGreen} LIGHT`;
+  return { red: maxRed, yellow: maxYellow, green: maxGreen, total, label };
+}
+
+function determineAutoContext(cfg, calTelemetry = null) {
   const params = new URLSearchParams(window.location.search);
   if (params.get("context") === "work" || params.get("context") === "personal") {
     state.manualOverride = true;
     return params.get("context");
   }
+
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
+  if (calTelemetry && calTelemetry.isWorkOffDay) {
+    return "personal";
+  }
+
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
@@ -159,10 +199,11 @@ async function autoPromoteCards(results) {
       if (counts[col] !== undefined) counts[col]++;
     });
 
+    const quotas = state.energyQuotas || calculateEnergyQuotas(0);
     const slots = {
-      red: Math.max(0, 1 - counts.red),
-      yellow: Math.max(0, 1 - counts.yellow),
-      green: Math.max(0, 2 - counts.green)
+      red: Math.max(0, quotas.red - counts.red),
+      yellow: Math.max(0, quotas.yellow - counts.yellow),
+      green: Math.max(0, quotas.green - counts.green)
     };
 
     let totalSlots = slots.red + slots.yellow + slots.green;
@@ -201,15 +242,20 @@ async function syncHud() {
   if (!checkLockGate()) return;
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
-  if (!state.manualOverride) state.context = determineAutoContext(cfg);
+
+  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day") and work-hour meeting load
+  const calData = await fetchCalendarTelemetry();
+  if (!state.manualOverride) state.context = determineAutoContext(cfg, calData);
   applyTheme();
+
+  // Re-calculate energy quotas for the resolved context
+  state.energyQuotas = calculateEnergyQuotas(calData);
 
   const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {
     const results = await Promise.all(validTargets.map(k => fetchBoardData(k, cfg.boards[k])));
-    
     await manageCardDependencies(results);
     await autoPromoteCards(results);
 
@@ -287,7 +333,6 @@ async function syncHud() {
 
     renderCards();
     updateQuickCaptureBlockerDropdown();
-    fetchCalendarTelemetry();
   } catch (err) {
     console.error(err);
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
@@ -299,9 +344,13 @@ function renderCards() {
   const todayFiltered = state.todayCards.filter(filterFn);
   const inboxFiltered = state.inboxCards.filter(filterFn);
 
+  const quotas = state.energyQuotas || { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" };
+  const todayLabel = document.getElementById("todaySectionLabel");
+  if (todayLabel) todayLabel.textContent = `⚡ TODAY'S LOAD (${quotas.label})`;
+
   const wipEl = document.getElementById("todayCount");
-  wipEl.textContent = `${state.todayCards.length} / 4`;
-  wipEl.classList.toggle("over", state.todayCards.length > 4);
+  wipEl.textContent = `${state.todayCards.length} / ${quotas.total}`;
+  wipEl.classList.toggle("over", state.todayCards.length > quotas.total);
   document.getElementById("inboxCount").textContent = state.inboxCards.length;
 
   const todayContainer = document.getElementById("todayList");
@@ -312,17 +361,11 @@ function renderCards() {
     const noteSnippet = c.notes ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>` : "";
     const blockerTag = (c.blockers && c.blockers.length > 0) ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>` : "";
 
-    const recurCadence = getCardRecurCadence(c);
-    const recurTag = recurCadence !== "none"
-      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${recurCadence === "twicedaily" ? "TWICE DAILY" : recurCadence.toUpperCase()}</span>`
-      : "";
-
     el.innerHTML = `
       <div class="task-info">
         <div class="task-title">${escapeHtml(c.name)}</div>
         <div class="task-meta">
           <span class="board-tag">${c.boardName}</span>
-          ${recurTag}
           ${blockerTag}
         </div>
         ${noteSnippet}
@@ -341,18 +384,11 @@ function renderCards() {
   inboxFiltered.forEach(c => {
     const el = document.createElement("div");
     el.className = `task-card energy-${c.energy}`;
-
-    const inboxRecurCadence = getCardRecurCadence(c);
-    const inboxRecurTag = inboxRecurCadence !== "none"
-      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${inboxRecurCadence === "twicedaily" ? "TWICE DAILY" : inboxRecurCadence.toUpperCase()}</span>`
-      : "";
-
     el.innerHTML = `
       <div class="task-info">
         <div class="task-title">${escapeHtml(c.name)}</div>
         <div class="task-meta">
           <span class="board-tag">${c.boardName}</span>
-          ${inboxRecurTag}
           <span class="energy-picker" title="Assign Energy Quota">
             <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
             <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
@@ -521,7 +557,8 @@ async function fetchCalendarTelemetry() {
   if (!webhookUrl) {
     console.log("[Calendar Gateway] No calendarWebhook found in config.js or localStorage.");
     if (card) card.style.display = "none";
-    return;
+    state.energyQuotas = calculateEnergyQuotas(null);
+    return null;
   }
 
   console.log("[Calendar Gateway] Fetching telemetry from:", webhookUrl);
@@ -530,26 +567,39 @@ async function fetchCalendarTelemetry() {
     const res = await fetch(webhookUrl, { redirect: "follow" });
     if (!res.ok) {
       console.error("[Calendar Gateway] HTTP error:", res.status, res.statusText);
-      return;
+      return null;
     }
     const data = await res.json();
     console.log("[Calendar Gateway] Telemetry payload received:", data);
 
     if (data.error) {
       console.error("[Calendar Gateway] Google Apps Script error:", data.message);
-      return;
+      return null;
     }
+
+    // Update global state and dynamic quotas based on booked meeting hours & off-day flag
+    state.calendarTelemetry = data;
+    state.energyQuotas = calculateEnergyQuotas(data);
 
     if (card) card.style.display = "block";
     const summary = document.getElementById("calSummaryText");
     const badge = document.getElementById("calNextBadge");
 
     if (summary) {
-      summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
+      if (data.isWorkOffDay) {
+        summary.textContent = `🌴 Scheduled Off Day: ${data.offDayReason || "Charles Off Day"}`;
+      } else if (state.context === "work") {
+        summary.textContent = `${data.workBookedHours ?? data.bookedHours} hrs work meetings (8:30a - 5:00p)`;
+      } else {
+        summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
+      }
     }
 
     if (badge) {
-      if (data.nextEvent) {
+      if (data.isWorkOffDay && state.context === "work") {
+        badge.className = "cal-badge-busy";
+        badge.textContent = "🌴 Work Locked (Off Day)";
+      } else if (data.nextEvent) {
         if (data.nextEvent.status === "IN PROGRESS") {
           badge.className = "cal-badge-busy";
           badge.textContent = `🔴 In Meeting: ${data.nextEvent.title} (ends in ${data.nextEvent.endsInMinutes}m)`;
@@ -562,8 +612,11 @@ async function fetchCalendarTelemetry() {
         badge.textContent = "Schedule Clear";
       }
     }
+    return data;
   } catch (e) {
     console.error("[Calendar Gateway] Calendar telemetry fetch error:", e);
+    state.energyQuotas = calculateEnergyQuotas(null);
+    return null;
   }
 }
 
