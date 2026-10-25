@@ -53,6 +53,19 @@
     </div>
   </section>
 
+<!-- CALENDAR SITUATIONAL AWARENESS STRIP -->
+<section class="cal-ticker-card" id="calendarTickerCard" style="display:none;">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+    <div style="display:flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:600; min-width:0;">
+      <span style="font-size:0.88rem;">📅</span>
+      <span id="calSummaryText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#cbd5e1;">0.0 hrs booked today</span>
+    </div>
+    <div id="calNextBadge" style="font-size:0.68rem; font-weight:700; background:#1e293b; color:var(--accent); border:1px solid #334155; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0;">
+      No upcoming events
+    </div>
+  </div>
+</section>
+  
   <!-- TACTICAL POMODORO MODULE -->
   <section class="pomodoro-card">
     <div class="pomo-header">
