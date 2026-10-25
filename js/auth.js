@@ -57,12 +57,30 @@ function checkLockGate() {
 }
 
 function loadConfig() {
-  if (window.HUD_CONFIG && window.HUD_CONFIG.apiKey && window.HUD_CONFIG.token) {
-    return window.HUD_CONFIG;
-  }
+  let localCfg = {};
   try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || null;
-  } catch { return null; }
+    localCfg = JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch (e) {
+    localCfg = {};
+  }
+  const winCfg = window.HUD_CONFIG || {};
+
+  // Deep merge board maps and properties so credentials in either file or localStorage are recognized
+  const mergedBoards = { ...(localCfg.boards || {}), ...(winCfg.boards || {}) };
+
+  const merged = {
+    ...localCfg,
+    ...winCfg,
+    boards: mergedBoards,
+    apiKey: winCfg.apiKey || localCfg.apiKey || "",
+    token: winCfg.token || localCfg.token || "",
+    passcode: winCfg.passcode || localCfg.passcode || "",
+    passcodeHash: winCfg.passcodeHash || localCfg.passcodeHash || "",
+    calendarWebhook: winCfg.calendarWebhook || localCfg.calendarWebhook || ""
+  };
+
+  if (!merged.apiKey && !merged.token) return null;
+  return merged;
 }
 
 function openSettings() {
@@ -94,31 +112,4 @@ function importJsonConfig() {
 }
 
 async function saveSettings() {
-  const enteredPass = document.getElementById("cfgPasscode").value;
-  const passHash = enteredPass ? await hashString(enteredPass) : "";
-  if (passHash) {
-    localStorage.setItem("TACTICAL_HUD_PASS_HASH", passHash);
-    sessionStorage.setItem("TACTICAL_HUD_SESSION_AUTH", "true");
-  } else {
-    localStorage.removeItem("TACTICAL_HUD_PASS_HASH");
-    sessionStorage.removeItem("TACTICAL_HUD_SESSION_AUTH");
-  }
-
-  const cfg = {
-    passcode: enteredPass,
-    passcodeHash: passHash,
-    apiKey: document.getElementById("cfgApiKey").value.trim(),
-    token: document.getElementById("cfgToken").value.trim(),
-    boards: {
-      work: document.getElementById("cfgBoardWork").value.trim(),
-      life: document.getElementById("cfgBoardLife").value.trim(),
-      vi: document.getElementById("cfgBoardVi").value.trim(),
-      lab: document.getElementById("cfgBoardLab").value.trim(),
-      growth: document.getElementById("cfgBoardGrowth").value.trim()
-    },
-    calendarWebhook: document.getElementById("cfgCalendarWebhook") ? document.getElementById("cfgCalendarWebhook").value.trim() : ""
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
-  closeSettings();
-  syncHud();
-}
+  const enteredPass = document.
