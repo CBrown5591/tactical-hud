@@ -9,4 +9,6 @@ window.HUD_CONFIG = {
     "lab": "6ad7a48bbc9447bac989cced",
     "growth": "6ad7a022dc61a631ad6e3608"
   }
+  // Add your Google Apps Script Webhook URL here:
+  calendarWebhook: "https://script.google.com/macros/s/AKfycbwllddgIYA4C3wXVnjA0U1yb4AtqF3vulKdbwQaBo5alUdM0GLx0c-fiXiFFNyq9ZeHfw/exec"
 };
