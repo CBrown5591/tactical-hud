@@ -112,4 +112,31 @@ function importJsonConfig() {
 }
 
 async function saveSettings() {
-  const enteredPass = document.
+  const enteredPass = document.getElementById("cfgPasscode").value;
+  const passHash = enteredPass ? await hashString(enteredPass) : "";
+  if (passHash) {
+    localStorage.setItem("TACTICAL_HUD_PASS_HASH", passHash);
+    sessionStorage.setItem("TACTICAL_HUD_SESSION_AUTH", "true");
+  } else {
+    localStorage.removeItem("TACTICAL_HUD_PASS_HASH");
+    sessionStorage.removeItem("TACTICAL_HUD_SESSION_AUTH");
+  }
+
+  const cfg = {
+    passcode: enteredPass,
+    passcodeHash: passHash,
+    apiKey: document.getElementById("cfgApiKey").value.trim(),
+    token: document.getElementById("cfgToken").value.trim(),
+    boards: {
+      work: document.getElementById("cfgBoardWork").value.trim(),
+      life: document.getElementById("cfgBoardLife").value.trim(),
+      vi: document.getElementById("cfgBoardVi").value.trim(),
+      lab: document.getElementById("cfgBoardLab").value.trim(),
+      growth: document.getElementById("cfgBoardGrowth").value.trim()
+    },
+    calendarWebhook: document.getElementById("cfgCalendarWebhook") ? document.getElementById("cfgCalendarWebhook").value.trim() : ""
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+  closeSettings();
+  syncHud();
+}
