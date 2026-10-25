@@ -287,6 +287,7 @@ async function syncHud() {
 
     renderCards();
     updateQuickCaptureBlockerDropdown();
+    fetchCalendarTelemetry();
   } catch (err) {
     console.error(err);
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
@@ -316,11 +317,17 @@ function renderCards() {
       ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>`
       : "";
 
+    const recurCadence = getCardRecurCadence(c);
+    const recurTag = recurCadence !== "none"
+      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${recurCadence === "twicedaily" ? "TWICE DAILY" : recurCadence.toUpperCase()}</span>`
+      : "";
+
     el.innerHTML = `
       <div class="task-info">
         <div class="task-title">${escapeHtml(c.name)}</div>
         <div class="task-meta">
           <span class="board-tag">${c.boardName}</span>
+          ${recurTag}
           ${blockerTag}
         </div>
         ${noteSnippet}
@@ -339,11 +346,18 @@ function renderCards() {
   inboxFiltered.forEach(c => {
     const el = document.createElement("div");
     el.className = `task-card energy-${c.energy}`;
+
+    const inboxRecurCadence = getCardRecurCadence(c);
+    const inboxRecurTag = inboxRecurCadence !== "none"
+      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${inboxRecurCadence === "twicedaily" ? "TWICE DAILY" : inboxRecurCadence.toUpperCase()}</span>`
+      : "";
+
     el.innerHTML = `
       <div class="task-info">
         <div class="task-title">${escapeHtml(c.name)}</div>
         <div class="task-meta">
           <span class="board-tag">${c.boardName}</span>
+          ${inboxRecurTag}
           <span class="energy-picker" title="Assign Energy Quota">
             <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
             <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
@@ -498,6 +512,47 @@ async function submitQuickCapture() {
   }
 
   syncHud();
+}
+
+async function fetchCalendarTelemetry() {
+  const cfg = loadConfig();
+  const card = document.getElementById("calendarTickerCard");
+  if (!cfg || !cfg.calendarWebhook) {
+    if (card) card.style.display = "none";
+    return;
+  }
+
+  try {
+    const res = await fetch(cfg.calendarWebhook);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.error) return;
+
+    if (card) card.style.display = "block";
+    const summary = document.getElementById("calSummaryText");
+    const badge = document.getElementById("calNextBadge");
+
+    if (summary) {
+      summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
+    }
+
+    if (badge) {
+      if (data.nextEvent) {
+        if (data.nextEvent.status === "IN PROGRESS") {
+          badge.className = "cal-badge-busy";
+          badge.textContent = `🔴 In Meeting: ${data.nextEvent.title} (ends in ${data.nextEvent.endsInMinutes}m)`;
+        } else {
+          badge.className = "cal-badge-upcoming";
+          badge.textContent = `⏳ ${data.nextEvent.startsInMinutes}m until ${data.nextEvent.title} (${data.nextEvent.startTimeFormatted})`;
+        }
+      } else {
+        badge.className = "";
+        badge.textContent = "Schedule Clear";
+      }
+    }
+  } catch (e) {
+    console.error("Calendar telemetry fetch error:", e);
+  }
 }
 
 function escapeHtml(str) {
