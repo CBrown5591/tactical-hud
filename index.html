@@ -53,19 +53,19 @@
     </div>
   </section>
 
-<!-- CALENDAR SITUATIONAL AWARENESS STRIP -->
-<section class="cal-ticker-card" id="calendarTickerCard" style="display:none;">
-  <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-    <div style="display:flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:600; min-width:0;">
-      <span style="font-size:0.88rem;">📅</span>
-      <span id="calSummaryText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#cbd5e1;">0.0 hrs booked today</span>
+  <!-- CALENDAR SITUATIONAL AWARENESS STRIP -->
+  <section class="cal-ticker-card" id="calendarTickerCard" style="display:none;">
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+      <div style="display:flex; align-items:center; gap:6px; font-size:0.75rem; font-weight:600; min-width:0;">
+        <span style="font-size:0.88rem;">📅</span>
+        <span id="calSummaryText" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#cbd5e1;">0.0 hrs booked today</span>
+      </div>
+      <div id="calNextBadge" style="font-size:0.68rem; font-weight:700; background:#1e293b; color:var(--accent); border:1px solid #334155; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0;">
+        No upcoming events
+      </div>
     </div>
-    <div id="calNextBadge" style="font-size:0.68rem; font-weight:700; background:#1e293b; color:var(--accent); border:1px solid #334155; padding:2px 8px; border-radius:999px; white-space:nowrap; flex-shrink:0;">
-      No upcoming events
-    </div>
-  </div>
-</section>
-  
+  </section>
+
   <!-- TACTICAL POMODORO MODULE -->
   <section class="pomodoro-card">
     <div class="pomo-header">
@@ -104,7 +104,7 @@
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
     </div>
     <div class="pill-row" id="personalBoardPills" style="display:none;">
-      <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King's Dominion')">🎢 King's Dom</button>
+      <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King\'s Dominion')">🎢 King's Dom</button>
       <button class="pill" data-board="vi" onclick="selectCaptureBoard('vi', '🏝️ By The VI')">🏝️ By The VI</button>
       <button class="pill" data-board="lab" onclick="selectCaptureBoard('lab', '⚡ Hiiii-Power')">⚡ Hiiii-Power</button>
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
@@ -260,6 +260,11 @@
       <div class="field"><label>By The VI Board ID (vi)</label><input id="cfgBoardVi" type="text" /></div>
       <div class="field"><label>Project Hiiii-Power Board ID (lab)</label><input id="cfgBoardLab" type="text" /></div>
       <div class="field"><label>Growth Board ID (growth)</label><input id="cfgBoardGrowth" type="text" /></div>
+      <hr style="border-color:#1e293b; margin:12px 0;" />
+      <div class="field">
+        <label>Google Calendar Apps Script Webhook URL (Optional)</label>
+        <input id="cfgCalendarWebhook" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
+      </div>
       <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:14px;">
         <button class="btn" onclick="closeSettings()">Cancel</button>
         <button class="btn btn-primary" onclick="saveSettings()">Save & Sync</button>
