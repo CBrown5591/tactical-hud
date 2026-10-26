@@ -180,8 +180,9 @@ function setEnergyFilter(energy) {
   renderCards();
 }
 
+// --- UNIFIED CROSS-BOARD AUTO-PROMOTE & QUOTA ENFORCER ---
 async function autoPromoteCards(results) {
-  let promotedAny = false;
+  let changedAny = false;
   const allCardsMap = {};
   for (const { listMap, cards } of results) {
     for (const c of cards) {
@@ -195,55 +196,122 @@ async function autoPromoteCards(results) {
     }
   }
 
-  for (const { boardKey, listMap, cards } of results) {
-    if (!listMap.today || !listMap.queue) continue;
+  const isWork = state.context === "work";
+  const boardPriority = isWork ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
+  const getBoardPriorityIdx = (bKey) => {
+    const idx = boardPriority.indexOf(bKey);
+    return idx === -1 ? 99 : idx;
+  };
 
-    const todayCards = cards.filter(c => c.idList === listMap.today && !c.name.startsWith("🎯"));
-    const queueCards = cards.filter(c => c.idList === listMap.queue);
+  const quotas = state.energyQuotas || calculateEnergyQuotas(0);
 
-    const counts = { red: 0, yellow: 0, green: 0 };
-    todayCards.forEach(c => {
-      const col = (c.labels && c.labels[0]) ? c.labels[0].color : "none";
-      if (counts[col] !== undefined) counts[col]++;
+  // --- PHASE 1: COLLECT ALL CURRENT TODAY CARDS ACROSS BOARDS ---
+  const todayEntries = [];
+  results.forEach(({ boardKey, listMap, cards }) => {
+    if (!listMap.today) return;
+    cards.forEach(card => {
+      if (card.idList === listMap.today && !card.name.startsWith("🎯")) {
+        const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+        todayEntries.push({ card, boardKey, listMap, energy: col });
+      }
     });
+  });
 
-    const quotas = state.energyQuotas || calculateEnergyQuotas(0);
-    const slots = {
-      red: Math.max(0, quotas.red - counts.red),
-      yellow: Math.max(0, quotas.yellow - counts.yellow),
-      green: Math.max(0, quotas.green - counts.green)
-    };
+  // --- PHASE 2: OVERFLOW REBALANCING (DEMOTE EXCESS BASED ON PRIORITY) ---
+  for (const energy of ["red", "yellow", "green"]) {
+    const matching = todayEntries.filter(e => e.energy === energy);
+    const maxAllowed = quotas[energy] || 0;
 
-    let totalSlots = slots.red + slots.yellow + slots.green;
-    if (totalSlots === 0 || queueCards.length === 0) continue;
+    if (matching.length > maxAllowed) {
+      matching.sort((a, b) => {
+        const prioA = getBoardPriorityIdx(a.boardKey);
+        const prioB = getBoardPriorityIdx(b.boardKey);
+        if (prioA !== prioB) return prioA - prioB; // lower index = higher priority to keep
+        const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
+        const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
+        return dueA - dueB;
+      });
 
-    const sortedQueue = [...queueCards].sort((a, b) => {
-      const dueA = a.due ? new Date(a.due).getTime() : Infinity;
-      const dueB = b.due ? new Date(b.due).getTime() : Infinity;
-      if (dueA !== dueB) return dueA - dueB;
-      return parseInt(a.id.substring(0, 8), 16) - parseInt(b.id.substring(0, 8), 16);
-    });
-
-    for (const card of sortedQueue) {
-      if (totalSlots === 0) break;
-      const blockers = getUnresolvedBlockers(card, allCardsMap);
-      if (blockers.length > 0) continue;
-
-      const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
-      if (slots[col] && slots[col] > 0) {
-        try {
-          await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.today}`);
-          card.idList = listMap.today;
-          slots[col]--;
-          totalSlots--;
-          promotedAny = true;
-        } catch (e) {
-          console.error("Auto-promote failed for card:", card.id, e);
+      const toDemote = matching.slice(maxAllowed);
+      for (const entry of toDemote) {
+        if (entry.listMap.queue) {
+          try {
+            await trelloFetch(`/cards/${entry.card.id}`, "PUT", `&idList=${entry.listMap.queue}&pos=top`);
+            entry.card.idList = entry.listMap.queue;
+            if (allCardsMap[entry.card.id]) allCardsMap[entry.card.id].idList = entry.listMap.queue;
+            const idx = todayEntries.findIndex(e => e.card.id === entry.card.id);
+            if (idx !== -1) todayEntries.splice(idx, 1);
+            changedAny = true;
+            console.log(`[Quota Enforcer] Demoted overflow ${entry.energy} task "${entry.card.name}" from [${entry.boardKey}] back to Queue.`);
+          } catch (e) {
+            console.error("Failed to demote overflow card:", entry.card.id, e);
+          }
         }
       }
     }
   }
-  return promotedAny;
+
+  // --- PHASE 3: CALCULATE REMAINING GLOBAL SLOTS ---
+  const currentCounts = { red: 0, yellow: 0, green: 0 };
+  todayEntries.forEach(e => {
+    if (currentCounts[e.energy] !== undefined) currentCounts[e.energy]++;
+  });
+
+  const slots = {
+    red: Math.max(0, quotas.red - currentCounts.red),
+    yellow: Math.max(0, quotas.yellow - currentCounts.yellow),
+    green: Math.max(0, quotas.green - currentCounts.green)
+  };
+
+  let totalSlots = slots.red + slots.yellow + slots.green;
+  if (totalSlots === 0) return changedAny;
+
+  // --- PHASE 4: UNIFIED MULTI-BOARD PROMOTION ---
+  const queueCandidates = [];
+  results.forEach(({ boardKey, listMap, cards }) => {
+    if (!listMap.queue || !listMap.today) return;
+    cards.forEach(card => {
+      if (card.idList === listMap.queue) {
+        const blockers = getUnresolvedBlockers(card, allCardsMap);
+        if (blockers.length === 0) {
+          const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+          queueCandidates.push({ card, boardKey, listMap, energy: col });
+        }
+      }
+    });
+  });
+
+  queueCandidates.sort((a, b) => {
+    const prioA = getBoardPriorityIdx(a.boardKey);
+    const prioB = getBoardPriorityIdx(b.boardKey);
+    if (prioA !== prioB) return prioA - prioB; // Primary board (Work) claims slots first
+
+    const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
+    const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
+    if (dueA !== dueB) return dueA - dueB;
+
+    return parseInt(a.card.id.substring(0, 8), 16) - parseInt(b.card.id.substring(0, 8), 16);
+  });
+
+  for (const candidate of queueCandidates) {
+    if (totalSlots === 0) break;
+    const col = candidate.energy;
+    if (slots[col] && slots[col] > 0) {
+      try {
+        await trelloFetch(`/cards/${candidate.card.id}`, "PUT", `&idList=${candidate.listMap.today}`);
+        candidate.card.idList = candidate.listMap.today;
+        if (allCardsMap[candidate.card.id]) allCardsMap[candidate.card.id].idList = candidate.listMap.today;
+        slots[col]--;
+        totalSlots--;
+        changedAny = true;
+        console.log(`[Unified Auto-Promote] Promoted ${col} task "${candidate.card.name}" from [${candidate.boardKey}] to Today.`);
+      } catch (e) {
+        console.error("Auto-promote failed for card:", candidate.card.id, e);
+      }
+    }
+  }
+
+  return changedAny;
 }
 
 async function syncHud() {
@@ -261,7 +329,6 @@ async function syncHud() {
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {
-    // Resilient board fetching: If one board fails (e.g. 404 or access revoked), don't crash the other boards
     const boardPromises = validTargets.map(async k => {
       try {
         return await fetchBoardData(k, cfg.boards[k]);
