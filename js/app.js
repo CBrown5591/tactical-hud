@@ -85,7 +85,7 @@ function determineAutoContext(cfg, calTelemetry = null) {
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
-  return (day >= 1 && day <= 5 && hour >= 8.5 && hour < 17.0) ? "work" : "personal";
+  return (day >= 1 && day <= 5 && hour >= 8.0 && hour < 17.0) ? "work" : "personal";
 }
 
 function applyTheme() {
@@ -739,7 +739,7 @@ async function fetchCalendarTelemetry() {
       if (data.isWorkOffDay) {
         summary.textContent = `🌴 Scheduled Off Day: ${data.offDayReason || "Charles Off Day"}`;
       } else if (state.context === "work") {
-        summary.textContent = `${data.workBookedHours ?? data.bookedHours} hrs work meetings (8:30a - 5:00p)`;
+        summary.textContent = `${data.workBookedHours ?? data.bookedHours} hrs work meetings (8:00a - 5:00p)`;
       } else {
         summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
       }
