@@ -107,7 +107,7 @@
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
     </div>
     <div class="pill-row" id="personalBoardPills" style="display:none;">
-      <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King's Dominion')">🎢 King's Dom</button>
+      <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King\'s Dominion')">🎢 King's Dom</button>
       <button class="pill" data-board="vi" onclick="selectCaptureBoard('vi', '🏝️ By The VI')">🏝️ By The VI</button>
       <button class="pill" data-board="lab" onclick="selectCaptureBoard('lab', '⚡ Hiiii-Power')">⚡ Hiiii-Power</button>
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
@@ -311,6 +311,26 @@
         </div>
       </div>
 
+      <!-- Deadline Modifiers Breakdown -->
+      <div class="sonic-section-label" style="margin-top:12px;">DEADLINE PRECISION (TIER-SCALED)</div>
+      <div class="sonic-grid-ledger">
+        <div class="sonic-ledger-row">
+          <span style="color:#38bdf8; font-weight:700;">⚡ EARLY INTERCEPT (24h+)</span>
+          <span id="dbEarlyCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbEarlyPts" style="color:#38bdf8;">+0</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:#22c55e; font-weight:700;">🎯 ON-TARGET CLEAR</span>
+          <span id="dbOntimeCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbOntimePts" style="color:#22c55e;">+0</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:#f43f5e; font-weight:700;">⚠️ OVERDUE CLEAR TAX</span>
+          <span id="dbOverdueCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbOverduePts" style="color:#f43f5e;">-0</span>
+        </div>
+      </div>
+
       <!-- Telemetry Normalization Breakdown -->
       <div class="sonic-section-label" style="margin-top:14px;">TELEMETRY NORMALIZATION</div>
       <div class="sonic-runway-box">
@@ -412,7 +432,7 @@
       <hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
         <label>Google Calendar Apps Script Webhook URL (Optional)</label>
-        <input id="cfgCalendarWebhook" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
+        <input id="cfgCalendarWebhook" type="text" placeholder="[https://script.google.com/macros/s/.../exec](https://script.google.com/macros/s/.../exec)" />
       </div>
       <hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
