@@ -396,15 +396,8 @@ async function syncHud() {
         if (card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("⚡ SCORE LEDGER")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
             state.scoreLedgerCardId = card.id;
-            if (card.desc && card.desc.trim().startsWith("{")) {
-              try {
-                const remote = JSON.parse(card.desc.trim());
-                if (typeof adoptRemoteScoreLedger === "function") {
-                  adoptRemoteScoreLedger(remote);
-                }
-              } catch (e) {
-                console.warn("[Score Cloud Sync] Failed to parse remote ledger:", e);
-              }
+            if (typeof hydrateCloudLedgerFromTrello === "function") {
+              hydrateCloudLedgerFromTrello(card.desc || "");
             }
           }
           return;
@@ -462,12 +455,12 @@ async function syncHud() {
         const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
         if (targetList) {
           try {
-            const initialPayload = JSON.stringify(loadDailyScoreLedger());
+            const initialPayload = JSON.stringify(activeCloudLedger, null, 2);
             const newLedgerCard = await trelloFetch('/cards', 'POST', `&idList=${targetList}&name=${encodeURIComponent("📊 SCORE LEDGER")}&desc=${encodeURIComponent(initialPayload)}&pos=bottom`);
             state.scoreLedgerCardId = newLedgerCard.id;
-            console.log("[Score Cloud Sync] Auto-created 📊 SCORE LEDGER card on Trello:", newLedgerCard.id);
+            console.log("[Portal Master] Auto-created authoritative 📊 SCORE LEDGER card on Trello:", newLedgerCard.id);
           } catch (e) {
-            console.warn("[Score Cloud Sync] Could not auto-create 📊 SCORE LEDGER card:", e);
+            console.warn("[Portal Master] Could not auto-create 📊 SCORE LEDGER card:", e);
           }
         }
       }
