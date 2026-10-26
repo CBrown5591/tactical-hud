@@ -31,14 +31,13 @@ function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
   const now = new Date();
   const day = now.getDay();
-  const isWeekend = (day === 0 || day === 6); // 0 = Sunday, 6 = Saturday
+  const isWeekend = (day === 0 || day === 6);
   const isOff = (calData && calData.isWorkOffDay) || isWeekend;
 
   const bookedHours = isWork
     ? (calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0)
     : (calData ? (calData.bookedHours ?? 0) : 0);
 
-  // Option A: If viewing Work HUD on a weekend or off-day (vacation, PTO, RDO), lock capacity to 0
   if (isWork && isOff) {
     let offLabel = "🌴 SCHEDULED OFF DAY (WORK LOCKED)";
     if (isWeekend) {
@@ -57,11 +56,11 @@ function calculateEnergyQuotas(calData = null) {
   let maxGreen = 2;
 
   if (bookedHours > 6.0) {
-    maxRed = 0; maxYellow = 0; maxGreen = 2; // Locked / high meeting load
+    maxRed = 0; maxYellow = 0; maxGreen = 2;
   } else if (bookedHours > 4.0) {
-    maxRed = 0; maxYellow = 1; maxGreen = 2; // Heavy meeting day (3 tasks max)
+    maxRed = 0; maxYellow = 1; maxGreen = 2;
   } else if (bookedHours > 2.0) {
-    maxRed = 0; maxYellow = 2; maxGreen = 2; // Moderate meeting load (convert Heavy to Medium)
+    maxRed = 0; maxYellow = 2; maxGreen = 2;
   }
 
   const total = maxRed + maxYellow + maxGreen;
@@ -76,7 +75,6 @@ function determineAutoContext(cfg, calTelemetry = null) {
     return params.get("context");
   }
 
-  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
   if (calTelemetry && calTelemetry.isWorkOffDay) {
     return "personal";
   }
@@ -253,19 +251,33 @@ async function syncHud() {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
 
-  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day") and work-hour meeting load
   const calData = await fetchCalendarTelemetry();
   if (!state.manualOverride) state.context = determineAutoContext(cfg, calData);
   applyTheme();
 
-  // Re-calculate energy quotas for the resolved context
   state.energyQuotas = calculateEnergyQuotas(calData);
 
   const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {
-    const results = await Promise.all(validTargets.map(k => fetchBoardData(k, cfg.boards[k])));
+    // Resilient board fetching: If one board fails (e.g. 404 or access revoked), don't crash the other boards
+    const boardPromises = validTargets.map(async k => {
+      try {
+        return await fetchBoardData(k, cfg.boards[k]);
+      } catch (err) {
+        console.warn(`[HUD Sync Warning] Skipped board '${k}' (${cfg.boards[k]}):`, err.message);
+        return { boardKey: k, listMap: {}, cards: [], error: err.message };
+      }
+    });
+    const allBoardResults = await Promise.all(boardPromises);
+    const results = allBoardResults.filter(b => !b.error && b.cards);
+
+    if (results.length === 0 && allBoardResults.some(b => b.error)) {
+      const firstErr = allBoardResults.find(b => b.error);
+      throw new Error(`Board '${firstErr.boardKey}' failed: ${firstErr.error}`);
+    }
+
     await manageCardDependencies(results);
     await autoPromoteCards(results);
 
@@ -605,7 +617,6 @@ async function fetchCalendarTelemetry() {
       return null;
     }
 
-    // Update global state and dynamic quotas based on booked meeting hours & off-day flag
     state.calendarTelemetry = data;
     state.energyQuotas = calculateEnergyQuotas(data);
 
