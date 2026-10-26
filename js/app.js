@@ -382,8 +382,8 @@ function renderCards() {
       </div>
       <div class="task-actions">
         <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
-        <button class="icon-btn" title="Move to Waiting" onclick="moveCard('${c.id}','${c.boardKey}','waiting')">⏳</button>
-        <button class="icon-btn done" title="Complete Task" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
+        <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
+        <button class="icon-btn done" title="Complete Task" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
       </div>
     `;
     todayContainer.appendChild(el);
@@ -410,7 +410,7 @@ function renderCards() {
         <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
         <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
         <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
-        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="moveCard('${c.id}','${c.boardKey}','done')">✓</button>
+        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
       </div>
     `;
     inboxContainer.appendChild(el);
@@ -634,6 +634,14 @@ async function fetchCalendarTelemetry() {
     state.energyQuotas = calculateEnergyQuotas(null);
     return null;
   }
+}
+
+async function completeCard(cardId, boardKey) {
+  const card = state.allLoadedCards.find(c => c.id === cardId);
+  if (card && typeof recordCardCompleted === "function") {
+    recordCardCompleted(card);
+  }
+  await moveCard(cardId, boardKey, 'done');
 }
 
 window.addEventListener("DOMContentLoaded", () => {
