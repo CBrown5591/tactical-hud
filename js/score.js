@@ -1,4 +1,4 @@
-// --- js/score.js: Tactical Focus HUD Scoring, Emerald Mastery & Telemetry Engine ---
+// --- js/score.js: Tactical Focus HUD Scoring, Emerald Mastery & Deadline Engine ---
 
 const SCORE_STORAGE_KEY_PREFIX = "TACTICAL_SCORE_LEDGER_";
 
@@ -17,6 +17,7 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
     completed: { red: 0, yellow: 0, green: 0, none: 0 },
     completedCardIds: [],
     completedBoards: [],
+    deadlineModifiers: { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 },
     deferralsExempt: 0,
     deferralsPenalized: 0,
     deferredCards: [],
@@ -32,10 +33,39 @@ function saveDailyScoreLedger(ledger, dateStr = getTodayScoreDateStr()) {
   }
 }
 
+// Tier-Scaled Deadline Modifier Calculation
+function calculateDeadlineModifier(energy = "green", dueStr = "") {
+  if (!dueStr) return { type: "none", pts: 0, label: "No Deadline" };
+
+  const now = new Date();
+  const dueDate = new Date(dueStr);
+  const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+  // Scaled lookup table by energy level: [Early, On-Target, Overdue/day, Floor]
+  const tierConfig = {
+    red:    { early: 50, ontime: 25, penaltyPerDay: 25, floor: 25 },
+    yellow: { early: 25, ontime: 15, penaltyPerDay: 15, floor: 10 },
+    green:  { early: 15, ontime: 10, penaltyPerDay: 10, floor: 5 },
+    none:   { early: 10, ontime: 5,  penaltyPerDay: 5,  floor: 0 }
+  };
+
+  const cfg = tierConfig[energy] || tierConfig.green;
+
+  if (diffHours >= 24) {
+    return { type: "early", pts: cfg.early, label: `⚡ Early (+${cfg.early})` };
+  } else if (diffHours >= -2) {
+    return { type: "ontime", pts: cfg.ontime, label: `🎯 On-Target (+${cfg.ontime})` };
+  } else {
+    const daysLate = Math.min(3, Math.ceil(Math.abs(diffHours) / 24));
+    const penalty = -(daysLate * cfg.penaltyPerDay);
+    return { type: "overdue", pts: penalty, label: `⚠️ Overdue ${daysLate}d (${penalty})` };
+  }
+}
+
 function recordCardCompleted(card) {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
-  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return; // prevent double counting
+  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return; // Prevent double counting
 
   if (!ledger.completedCardIds) ledger.completedCardIds = [];
   ledger.completedCardIds.push(card.id);
@@ -51,6 +81,23 @@ function recordCardCompleted(card) {
   } else {
     ledger.completed.none++;
   }
+
+  // Calculate & record Tier-Scaled Deadline Modifier
+  if (!ledger.deadlineModifiers) {
+    ledger.deadlineModifiers = { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
+  }
+  const mod = calculateDeadlineModifier(energy, card.due);
+  if (mod.type === "early") {
+    ledger.deadlineModifiers.earlyCount++;
+    ledger.deadlineModifiers.earlyPts += mod.pts;
+  } else if (mod.type === "ontime") {
+    ledger.deadlineModifiers.ontimeCount++;
+    ledger.deadlineModifiers.ontimePts += mod.pts;
+  } else if (mod.type === "overdue") {
+    ledger.deadlineModifiers.overdueCount++;
+    ledger.deadlineModifiers.overduePts += mod.pts;
+  }
+
   saveDailyScoreLedger(ledger);
 }
 
@@ -85,7 +132,11 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   const greenPts = (ledger.completed.green || 0) * 25;
   const penaltyPts = (ledger.deferralsPenalized || 0) * 15;
 
-  const rawScore = Math.max(0, redPts + yellowPts + greenPts - penaltyPts);
+  // Deadline Modifiers
+  const dMods = ledger.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
+  const deadlineNetPts = (dMods.earlyPts || 0) + (dMods.ontimePts || 0) + (dMods.overduePts || 0);
+
+  const rawScore = Math.max(0, redPts + yellowPts + greenPts + deadlineNetPts - penaltyPts);
 
   // Runway normalization (8:30 AM - 5:00 PM = 8.5h window)
   const isWork = state && state.context === "work";
@@ -155,6 +206,8 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
     redPts,
     yellowPts,
     greenPts,
+    deadlineNetPts,
+    dMods,
     penaltyPts,
     totalRunway,
     meetingHours,
@@ -170,19 +223,12 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
 // --- 7 CHAOS EMERALDS WEEKLY MILESTONES ---
 function evaluateChaosEmeralds(weekStats) {
-  // 1. Green: Light Volume Throughput (>= 6 Light tasks)
   const green = weekStats.totalGreen >= 6;
-  // 2. Yellow: Medium Cruise Consistency (>= 4 Medium tasks)
   const yellow = weekStats.totalYellow >= 4;
-  // 3. Red: High Voltage Breakthrough (>= 2 Heavy tasks)
   const red = weekStats.totalRed >= 2;
-  // 4. Blue: Temporal Shield Defense (Survive high meeting load >= 3h with S or A grade)
   const blue = weekStats.highMeetingDefense || (weekStats.avgYield >= 32.0 && weekStats.totalMeetings >= 4.0);
-  // 5. Purple: Roadblock Friction Mastery (100% documented, at least 1 documented deferral and 0 penalized)
   const purple = weekStats.totalExempt >= 1 && weekStats.totalPenalized === 0;
-  // 6. White: Multi-Ring Balance (Tasks completed across >= 3 distinct boards)
   const white = weekStats.distinctBoardsCount >= 3;
-  // 7. Sky: Chaos Control Mastery (Activated Chaos Control at least once)
   const sky = weekStats.totalChaosControl >= 1;
 
   const emeralds = [
@@ -203,7 +249,7 @@ function evaluateChaosEmeralds(weekStats) {
 
 function getWeeklyRollingStats() {
   const now = new Date();
-  const dayOfWeek = now.getDay(); // 0 is Sunday
+  const dayOfWeek = now.getDay();
   const monday = new Date(now);
   const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
   monday.setDate(diff);
@@ -217,6 +263,7 @@ function getWeeklyRollingStats() {
   let totalChaosControl = 0;
   let distinctBoardsSet = new Set();
   let highMeetingDefense = false;
+  let weeklyEarly = 0, weeklyOntime = 0, weeklyOverdue = 0;
 
   for (let i = 0; i < 7; i++) {
     const cur = new Date(monday);
@@ -226,7 +273,14 @@ function getWeeklyRollingStats() {
     if (raw) {
       try {
         const l = JSON.parse(raw);
-        const dayScore = ((l.completed.red || 0) * 100) + ((l.completed.yellow || 0) * 50) + ((l.completed.green || 0) * 25) - ((l.deferralsPenalized || 0) * 15);
+        const dm = l.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
+        weeklyEarly += (dm.earlyCount || 0);
+        weeklyOntime += (dm.ontimeCount || 0);
+        weeklyOverdue += (dm.overdueCount || 0);
+
+        const dNet = (dm.earlyPts || 0) + (dm.ontimePts || 0) + (dm.overduePts || 0);
+        const dayScore = ((l.completed.red || 0) * 100) + ((l.completed.yellow || 0) * 50) + ((l.completed.green || 0) * 25) + dNet - ((l.deferralsPenalized || 0) * 15);
+
         if (dayScore > 0 || (l.completedCardIds && l.completedCardIds.length > 0) || l.chaosControlCount > 0) {
           daysActive++;
           totalScore += Math.max(0, dayScore);
@@ -250,8 +304,6 @@ function getWeeklyRollingStats() {
   else if (avgYield >= 22.0) grade = "CLASS B CRUISE";
   else grade = "CLASS C STABILIZATION";
 
-  const distinctBoardsCount = distinctBoardsSet.size;
-
   const baseStats = {
     totalScore,
     daysActive,
@@ -259,10 +311,13 @@ function getWeeklyRollingStats() {
     totalRed,
     totalYellow,
     totalGreen,
+    weeklyEarly,
+    weeklyOntime,
+    weeklyOverdue,
     totalExempt,
     totalPenalized,
     totalChaosControl,
-    distinctBoardsCount,
+    distinctBoardsCount: distinctBoardsSet.size,
     highMeetingDefense,
     avgYield,
     grade
@@ -295,6 +350,7 @@ function openDebriefModal() {
   document.getElementById("dbScoreDisplay").textContent = `${stats.rawScore} PTS`;
   document.getElementById("dbYieldDisplay").textContent = `${stats.yieldRate} PTS / FOCUS HR`;
 
+  // Energy Tier Points
   document.getElementById("dbRedCount").textContent = `${ledger.completed.red || 0}`;
   document.getElementById("dbRedPts").textContent = `+${stats.redPts}`;
   document.getElementById("dbYellowCount").textContent = `${ledger.completed.yellow || 0}`;
@@ -302,10 +358,29 @@ function openDebriefModal() {
   document.getElementById("dbGreenCount").textContent = `${ledger.completed.green || 0}`;
   document.getElementById("dbGreenPts").textContent = `+${stats.greenPts}`;
 
+  // Deadline Modifiers Breakdown
+  const dMods = stats.dMods || { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
+  const earlyEl = document.getElementById("dbEarlyCount");
+  if (earlyEl) earlyEl.textContent = `${dMods.earlyCount || 0}`;
+  const earlyPtsEl = document.getElementById("dbEarlyPts");
+  if (earlyPtsEl) earlyPtsEl.textContent = `+${dMods.earlyPts || 0}`;
+
+  const ontimeEl = document.getElementById("dbOntimeCount");
+  if (ontimeEl) ontimeEl.textContent = `${dMods.ontimeCount || 0}`;
+  const ontimePtsEl = document.getElementById("dbOntimePts");
+  if (ontimePtsEl) ontimePtsEl.textContent = `+${dMods.ontimePts || 0}`;
+
+  const overdueEl = document.getElementById("dbOverdueCount");
+  if (overdueEl) overdueEl.textContent = `${dMods.overdueCount || 0}`;
+  const overduePtsEl = document.getElementById("dbOverduePts");
+  if (overduePtsEl) overduePtsEl.textContent = dMods.overduePts < 0 ? `${dMods.overduePts}` : `0`;
+
+  // Roadblocks & Deferrals
   document.getElementById("dbExemptCount").textContent = `${ledger.deferralsExempt || 0}`;
   document.getElementById("dbPenalizedCount").textContent = `${ledger.deferralsPenalized || 0}`;
   document.getElementById("dbPenaltyPts").textContent = stats.penaltyPts > 0 ? `-${stats.penaltyPts}` : `0`;
 
+  // Normalization details
   document.getElementById("dbRunwayBase").textContent = `${stats.totalRunway.toFixed(2)}h`;
   document.getElementById("dbMeetingsBooked").textContent = `-${stats.meetingHours.toFixed(2)}h`;
   document.getElementById("dbDecompTax").textContent = `-${stats.decompressionTax.toFixed(2)}h`;
@@ -457,5 +532,4 @@ function checkAndSchedulePushNotifications() {
   }
 }
 
-// Check notification triggers every 5 minutes
 setInterval(checkAndSchedulePushNotifications, 5 * 60 * 1000);
