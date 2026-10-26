@@ -33,6 +33,7 @@
       <span id="modeTitle">💼 WORK HUD</span>
     </div>
     <div class="controls">
+      <button class="btn" id="debriefBtn" title="Tactical Debrief Scorecard" onclick="openDebriefModal()" style="border-color: #38bdf8; color: #38bdf8;">🏆 Score</button>
       <button class="btn" id="reportBtn" title="Generate Work Briefing" onclick="openReportModal()">📊 Report</button>
       <button class="btn" id="toggleContextBtn" onclick="toggleManualContext()">Switch Mode</button>
       <button class="btn" onclick="syncHud()">↻</button>
@@ -156,7 +157,7 @@
     <!-- TODAY'S LOAD -->
     <section class="panel">
       <div class="section-label">
-        <span>⚡ TODAY'S LOAD (1 HEAVY / 1 MED / 2 LIGHT)</span>
+        <span id="todaySectionLabel">⚡ TODAY'S LOAD (1 HEAVY / 1 MED / 2 LIGHT)</span>
         <span class="wip-counter" id="todayCount">0 / 4</span>
       </div>
       <div class="task-list" id="todayList"><div class="empty-state">Loading active tasks...</div></div>
@@ -238,6 +239,115 @@
     </div>
   </div>
 
+  <!-- TACTICAL SCORECARD & DEBRIEF MODAL (SONIC RESULTS SCREEN) -->
+  <div class="modal-backdrop" id="debriefModal">
+    <div class="modal sonic-scorecard-modal">
+      <div class="sonic-header">
+        <div class="sonic-title">⚡ TACTICAL SCORECARD // STAGE CLEAR</div>
+        <div class="sonic-subtitle" id="dbDateSubtitle">Daily Yield & Execution Telemetry</div>
+      </div>
+
+      <!-- Rank & Big Numbers Section -->
+      <div class="sonic-hero-row">
+        <div class="sonic-rank-container">
+          <div class="sonic-rank-box" id="dbRankBadge">S</div>
+        </div>
+        <div class="sonic-hero-stats">
+          <div class="sonic-rank-title" id="dbRankTitle">CLASS S // SONIC MASTER</div>
+          <div class="sonic-score-val" id="dbScoreDisplay">275 PTS</div>
+          <div class="sonic-yield-val" id="dbYieldDisplay">44.0 PTS / FOCUS HR</div>
+        </div>
+      </div>
+
+      <!-- Yield Meter -->
+      <div style="margin: 10px 0 16px 0;">
+        <div style="display:flex; justify-content:space-between; font-size:0.68rem; color:var(--muted); margin-bottom:4px; font-weight:700;">
+          <span>EFFICIENCY YIELD</span>
+          <span>CAP: 50 PTS/HR</span>
+        </div>
+        <div class="sonic-bar-track">
+          <div class="sonic-bar-fill" id="dbYieldBar" style="width: 80%;"></div>
+        </div>
+      </div>
+
+      <!-- Completed Task Energy Grid -->
+      <div class="sonic-section-label">TASK BREAKDOWN</div>
+      <div class="sonic-grid-ledger">
+        <div class="sonic-ledger-row">
+          <span style="color:var(--high); font-weight:700;">🔴 HIGH VOLTAGE (Heavy)</span>
+          <span id="dbRedCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbRedPts">+0</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:var(--med); font-weight:700;">🟡 MEDIUM CRUISE (Med)</span>
+          <span id="dbYellowCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbYellowPts">+0</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:var(--low); font-weight:700;">🟢 LOW BATTERY (Light)</span>
+          <span id="dbGreenCount" style="font-weight:700;">0</span>
+          <span class="sonic-pts-tag" id="dbGreenPts">+0</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:#38bdf8; font-weight:700;">🛡️ DOCUMENTED ROADBLOCKS</span>
+          <span id="dbExemptCount" style="font-weight:700;">0</span>
+          <span style="color:#38bdf8; font-size:0.75rem; font-weight:700;">EXEMPT (0)</span>
+        </div>
+        <div class="sonic-ledger-row">
+          <span style="color:#f43f5e; font-weight:700;">⚠️ UNDOCUMENTED DEFERRALS</span>
+          <span id="dbPenalizedCount" style="font-weight:700;">0</span>
+          <span style="color:#f43f5e; font-weight:700;" id="dbPenaltyPts">-0</span>
+        </div>
+      </div>
+
+      <!-- Telemetry Normalization Breakdown -->
+      <div class="sonic-section-label" style="margin-top:14px;">TELEMETRY NORMALIZATION</div>
+      <div class="sonic-runway-box">
+        <div class="sonic-runway-row">
+          <span>Base Shift Window:</span>
+          <span id="dbRunwayBase" style="font-family:monospace; color:#fff;">8.50h</span>
+        </div>
+        <div class="sonic-runway-row">
+          <span>Booked Meetings:</span>
+          <span id="dbMeetingsBooked" style="font-family:monospace; color:#fca5a5;">-0.00h</span>
+        </div>
+        <div class="sonic-runway-row">
+          <span>Decompression Damping (1.25x Tax):</span>
+          <span id="dbDecompTax" style="font-family:monospace; color:#fde047;">-0.00h</span>
+        </div>
+        <div class="sonic-runway-row" style="border-top:1px dashed #334155; padding-top:4px; font-weight:700;">
+          <span style="color:#38bdf8;">True Operational Runway:</span>
+          <span id="dbNetRunway" style="font-family:monospace; color:#38bdf8;">8.50h</span>
+        </div>
+      </div>
+
+      <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:16px;">
+        <button class="btn btn-primary" style="width:100%; padding:10px; font-weight:700; letter-spacing:1px;" onclick="closeDebriefModal()">DISMISS DEBRIEF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ROADBLOCK DEFERRAL MICRO-PROMPT MODAL -->
+  <div class="modal-backdrop" id="deferralModal">
+    <div class="modal" style="max-width: 440px;">
+      <h2 style="font-size:1.05rem; margin-bottom:6px; color:#fde047;">⏳ Defer Task to Waiting</h2>
+      <p style="font-size:0.75rem; color:#cbd5e1; margin-bottom:10px;">
+        Moving <strong id="deferralModalCardName" style="color:#fff;"></strong> to Waiting.
+      </p>
+      <div class="field">
+        <label style="color:#94a3b8; font-size:0.75rem;">Document Roadblock / Prerequisite (Optional):</label>
+        <input type="text" id="deferralReasonInput" placeholder="e.g., Waiting on vendor API access, PR review..." onkeydown="if(event.key==='Enter') confirmDeferral(true)" />
+        <span style="font-size:0.68rem; color:#38bdf8; display:block; margin-top:4px;">
+          🛡️ Documenting your roadblock comments the task in Trello and <strong>waives the -15 pt deferral tax</strong>.
+        </span>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:14px;">
+        <button class="btn" style="color:#f87171; border-color:#7f1d1d;" onclick="confirmDeferral(false)">Skip & Demote (-15 pts)</button>
+        <button class="btn btn-primary" onclick="confirmDeferral(true)">Save & Defer (0 pts ✓)</button>
+      </div>
+    </div>
+  </div>
+
   <!-- SETTINGS MODAL -->
   <div class="modal-backdrop" id="settingsModal">
     <div class="modal">
@@ -275,6 +385,7 @@
   <!-- Modular Architecture -->
   <script src="js/auth.js"></script>
   <script src="js/pomo.js"></script>
+  <script src="js/score.js"></script>
   <script src="js/trello.js"></script>
   <script src="js/dependencies.js"></script>
   <script src="js/app.js"></script>
