@@ -1,20 +1,53 @@
-// --- js/score.js: Tactical Focus HUD Scoring, Emerald Mastery & Cloud Ledger Engine ---
-
-const SCORE_STORAGE_KEY_PREFIX = "TACTICAL_SCORE_LEDGER_";
+// --- js/score.js: Pure Cloud Ledger & Score Engine (Zero Local Storage) ---
 
 function getTodayScoreDateStr() {
   const now = new Date();
   return now.toISOString().split("T")[0]; // "YYYY-MM-DD"
 }
 
-function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
+// In-memory runtime state for the score ledger.
+// Initialized with empty defaults, hydrated strictly from Trello's "📊 SCORE LEDGER" card.
+let activeCloudLedger = {
+  currentDate: getTodayScoreDateStr(),
+  today: {
+    date: getTodayScoreDateStr(),
+    completed: { red: 0, yellow: 0, green: 0, none: 0 },
+    completedCardIds: [],
+    completedBoards: [],
+    deadlineModifiers: { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 },
+    deferralsExempt: 0,
+    deferralsPenalized: 0,
+    deferredCards: [],
+    chaosControlCount: 0
+  },
+  history: {}
+};
+
+// Purge all legacy local storage score caches across all devices to prevent zombie state
+function purgeLegacyLocalScoreCache() {
   try {
-    const raw = localStorage.getItem(SCORE_STORAGE_KEY_PREFIX + dateStr);
-    if (raw) return JSON.parse(raw);
+    const keysToRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && (key.startsWith("TACTICAL_SCORE_LEDGER_") || key.startsWith("HUD_SCORE_"))) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach(k => localStorage.removeItem(k));
   } catch (e) {}
+}
+purgeLegacyLocalScoreCache();
+
+function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
+  const todayStr = getTodayScoreDateStr();
+  if (dateStr === todayStr && activeCloudLedger && activeCloudLedger.today) {
+    return activeCloudLedger.today;
+  }
+  if (activeCloudLedger && activeCloudLedger.history && activeCloudLedger.history[dateStr]) {
+    return activeCloudLedger.history[dateStr];
+  }
   return {
     date: dateStr,
-    updatedAt: 0,
     completed: { red: 0, yellow: 0, green: 0, none: 0 },
     completedCardIds: [],
     completedBoards: [],
@@ -26,65 +59,63 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
   };
 }
 
-let _scorePushTimeout = null;
-function pushScoreLedgerToTrello(ledger = loadDailyScoreLedger()) {
+// Push directly to Trello card (The Singular Source of Truth)
+async function commitScoreLedgerToTrello(ledger = activeCloudLedger.today) {
   if (!state || !state.scoreLedgerCardId) return;
   if (typeof trelloFetch !== "function") return;
 
-  if (_scorePushTimeout) clearTimeout(_scorePushTimeout);
-  _scorePushTimeout = setTimeout(async () => {
-    try {
-      const payload = JSON.stringify(ledger);
-      await trelloFetch(`/cards/${state.scoreLedgerCardId}`, "PUT", `&desc=${encodeURIComponent(payload)}`);
-      console.log("[Score Cloud Sync] Pushed score ledger to Trello card:", ledger);
-    } catch (e) {
-      console.warn("[Score Cloud Sync] Failed to push ledger to Trello:", e);
-    }
-  }, 350);
-}
-
-function adoptRemoteScoreLedger(remoteLedger) {
-  if (!remoteLedger || !remoteLedger.date) return;
   const todayStr = getTodayScoreDateStr();
-  if (remoteLedger.date !== todayStr) return;
+  activeCloudLedger.currentDate = todayStr;
+  activeCloudLedger.today = ledger;
+  if (!activeCloudLedger.history) activeCloudLedger.history = {};
+  activeCloudLedger.history[todayStr] = ledger;
 
-  const local = loadDailyScoreLedger(todayStr);
-
-  const localTime = local.updatedAt || 0;
-  const remoteTime = remoteLedger.updatedAt || 0;
-
-  // Authoritative adoption: newer timestamp wins completely
-  if (remoteTime >= localTime || !local.updatedAt) {
-    const cleanLedger = {
-      date: todayStr,
-      updatedAt: remoteTime || Date.now(),
-      completed: remoteLedger.completed || { red: 0, yellow: 0, green: 0, none: 0 },
-      completedCardIds: remoteLedger.completedCardIds || [],
-      completedBoards: remoteLedger.completedBoards || [],
-      deadlineModifiers: remoteLedger.deadlineModifiers || {
-        earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0
-      },
-      deferralsExempt: remoteLedger.deferralsExempt || 0,
-      deferralsPenalized: remoteLedger.deferralsPenalized || 0,
-      deferredCards: remoteLedger.deferredCards || [],
-      chaosControlCount: remoteLedger.chaosControlCount || 0
-    };
-    saveDailyScoreLedger(cleanLedger, todayStr, false);
-    console.log("[Score Cloud Sync] Authoritative remote ledger adopted:", cleanLedger);
-  } else {
-    pushScoreLedgerToTrello(local);
+  try {
+    const payload = JSON.stringify(activeCloudLedger, null, 2);
+    await trelloFetch(`/cards/${state.scoreLedgerCardId}`, "PUT", `&desc=${encodeURIComponent(payload)}`);
+    console.log("[Portal Master] Committed authoritative score ledger to Trello card:", activeCloudLedger);
+  } catch (e) {
+    console.error("[Portal Master] Failed to commit score ledger to Trello:", e);
   }
 }
 
-function saveDailyScoreLedger(ledger, dateStr = getTodayScoreDateStr(), pushToCloud = true) {
+// Adopt cloud ledger from Trello card description into runtime memory
+function hydrateCloudLedgerFromTrello(cardDesc) {
+  if (!cardDesc || !cardDesc.trim()) return;
   try {
-    ledger.updatedAt = Date.now();
-    localStorage.setItem(SCORE_STORAGE_KEY_PREFIX + dateStr, JSON.stringify(ledger));
-    if (pushToCloud) {
-      pushScoreLedgerToTrello(ledger);
+    const parsed = JSON.parse(cardDesc.trim());
+    const todayStr = getTodayScoreDateStr();
+
+    // Check if it's the structured { currentDate, today, history } format or flat ledger
+    if (parsed.today && parsed.currentDate) {
+      activeCloudLedger = parsed;
+      // If it's a new day, rollover today
+      if (activeCloudLedger.currentDate !== todayStr) {
+        if (!activeCloudLedger.history) activeCloudLedger.history = {};
+        activeCloudLedger.history[activeCloudLedger.currentDate] = activeCloudLedger.today;
+        activeCloudLedger.currentDate = todayStr;
+        activeCloudLedger.today = {
+          date: todayStr,
+          completed: { red: 0, yellow: 0, green: 0, none: 0 },
+          completedCardIds: [],
+          completedBoards: [],
+          deadlineModifiers: { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 },
+          deferralsExempt: 0,
+          deferralsPenalized: 0,
+          deferredCards: [],
+          chaosControlCount: 0
+        };
+      }
+    } else if (parsed.date) {
+      // Legacy flat ledger
+      activeCloudLedger.currentDate = parsed.date;
+      activeCloudLedger.today = parsed;
+      if (!activeCloudLedger.history) activeCloudLedger.history = {};
+      activeCloudLedger.history[parsed.date] = parsed;
     }
+    console.log("[Portal Master] Hydrated score ledger directly from Trello:", activeCloudLedger);
   } catch (e) {
-    console.error("Failed to save score ledger:", e);
+    console.warn("[Portal Master] Failed to parse Trello score ledger card description:", e);
   }
 }
 
@@ -116,7 +147,7 @@ function calculateDeadlineModifier(energy = "green", dueStr = "") {
   }
 }
 
-function recordCardCompleted(card) {
+async function recordCardCompleted(card) {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
   if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return;
@@ -151,10 +182,10 @@ function recordCardCompleted(card) {
     ledger.deadlineModifiers.overduePts += mod.pts;
   }
 
-  saveDailyScoreLedger(ledger);
+  await commitScoreLedgerToTrello(ledger);
 }
 
-function recordCardDeferred(card, isExempt = false, reason = "") {
+async function recordCardDeferred(card, isExempt = false, reason = "") {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
   if (isExempt) {
@@ -170,13 +201,13 @@ function recordCardDeferred(card, isExempt = false, reason = "") {
     reason,
     time: new Date().toISOString()
   });
-  saveDailyScoreLedger(ledger);
+  await commitScoreLedgerToTrello(ledger);
 }
 
-function recordChaosControlUsage(taskName = "") {
+async function recordChaosControlUsage(taskName = "") {
   const ledger = loadDailyScoreLedger();
   ledger.chaosControlCount = (ledger.chaosControlCount || 0) + 1;
-  saveDailyScoreLedger(ledger);
+  await commitScoreLedgerToTrello(ledger);
 }
 
 function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = (state && state.calendarTelemetry)) {
@@ -190,6 +221,7 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
   const rawScore = Math.max(0, redPts + yellowPts + greenPts + deadlineNetPts - penaltyPts);
 
+  // Runway normalization (8:00 AM - 5:00 PM = 9.0h window)
   const isWork = state && state.context === "work";
   const now = new Date();
   const day = now.getDay();
@@ -318,31 +350,32 @@ function getWeeklyRollingStats() {
     const cur = new Date(monday);
     cur.setDate(monday.getDate() + i);
     const dateStr = cur.toISOString().split("T")[0];
-    const raw = localStorage.getItem(SCORE_STORAGE_KEY_PREFIX + dateStr);
-    if (raw) {
-      try {
-        const l = JSON.parse(raw);
-        const dm = l.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
-        weeklyEarly += (dm.earlyCount || 0);
-        weeklyOntime += (dm.ontimeCount || 0);
-        weeklyOverdue += (dm.overdueCount || 0);
+    
+    // Look up day ledger from cloud history
+    const l = (activeCloudLedger.history && activeCloudLedger.history[dateStr]) || 
+              (activeCloudLedger.currentDate === dateStr ? activeCloudLedger.today : null);
 
-        const dNet = (dm.earlyPts || 0) + (dm.ontimePts || 0) + (dm.overduePts || 0);
-        const dayScore = ((l.completed.red || 0) * 100) + ((l.completed.yellow || 0) * 50) + ((l.completed.green || 0) * 25) + dNet - ((l.deferralsPenalized || 0) * 15);
+    if (l) {
+      const dm = l.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
+      weeklyEarly += (dm.earlyCount || 0);
+      weeklyOntime += (dm.ontimeCount || 0);
+      weeklyOverdue += (dm.overdueCount || 0);
 
-        if (dayScore > 0 || (l.completedCardIds && l.completedCardIds.length > 0) || l.chaosControlCount > 0) {
-          daysActive++;
-          totalScore += Math.max(0, dayScore);
-          totalRed += (l.completed.red || 0);
-          totalYellow += (l.completed.yellow || 0);
-          totalGreen += (l.completed.green || 0);
-          totalExempt += (l.deferralsExempt || 0);
-          totalPenalized += (l.deferralsPenalized || 0);
-          totalChaosControl += (l.chaosControlCount || 0);
-          (l.completedBoards || []).forEach(b => distinctBoardsSet.add(b));
-          totalNetRunway += 6.0;
-        }
-      } catch (e) {}
+      const dNet = (dm.earlyPts || 0) + (dm.ontimePts || 0) + (dm.overduePts || 0);
+      const dayScore = ((l.completed?.red || 0) * 100) + ((l.completed?.yellow || 0) * 50) + ((l.completed?.green || 0) * 25) + dNet - ((l.deferralsPenalized || 0) * 15);
+
+      if (dayScore > 0 || (l.completedCardIds && l.completedCardIds.length > 0) || l.chaosControlCount > 0) {
+        daysActive++;
+        totalScore += Math.max(0, dayScore);
+        totalRed += (l.completed?.red || 0);
+        totalYellow += (l.completed?.yellow || 0);
+        totalGreen += (l.completed?.green || 0);
+        totalExempt += (l.deferralsExempt || 0);
+        totalPenalized += (l.deferralsPenalized || 0);
+        totalChaosControl += (l.chaosControlCount || 0);
+        (l.completedBoards || []).forEach(b => distinctBoardsSet.add(b));
+        totalNetRunway += 6.0;
+      }
     }
   }
 
@@ -398,11 +431,11 @@ function openDebriefModal() {
   document.getElementById("dbScoreDisplay").textContent = `${stats.rawScore} PTS`;
   document.getElementById("dbYieldDisplay").textContent = `${stats.yieldRate} PTS / FOCUS HR`;
 
-  document.getElementById("dbRedCount").textContent = `${ledger.completed.red || 0}`;
+  document.getElementById("dbRedCount").textContent = `${ledger.completed?.red || 0}`;
   document.getElementById("dbRedPts").textContent = `+${stats.redPts}`;
-  document.getElementById("dbYellowCount").textContent = `${ledger.completed.yellow || 0}`;
+  document.getElementById("dbYellowCount").textContent = `${ledger.completed?.yellow || 0}`;
   document.getElementById("dbYellowPts").textContent = `+${stats.yellowPts}`;
-  document.getElementById("dbGreenCount").textContent = `${ledger.completed.green || 0}`;
+  document.getElementById("dbGreenCount").textContent = `${ledger.completed?.green || 0}`;
   document.getElementById("dbGreenPts").textContent = `+${stats.greenPts}`;
 
   const dMods = stats.dMods || { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
@@ -500,9 +533,9 @@ async function confirmDeferral(isDocumented) {
     } catch (e) {
       console.error("Could not post roadblock comment:", e);
     }
-    recordCardDeferred(card, true, reason);
+    await recordCardDeferred(card, true, reason);
   } else {
-    recordCardDeferred(card, false, "Undocumented");
+    await recordCardDeferred(card, false, "Undocumented");
   }
 
   await moveCard(cardId, boardKey, 'waiting');
