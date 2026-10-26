@@ -4,7 +4,7 @@ async function trelloFetch(path, method = "GET", queryParams = "") {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) throw new Error("Missing credentials");
   const sep = path.includes("?") ? "&" : "?";
-  const url = `https://api.trello.com/1${path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
+  const url = `[https://api.trello.com/1$](https://api.trello.com/1$){path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
   const res = await fetch(url, { method });
   if (!res.ok) throw new Error(`Trello API error: ${res.status}`);
   return res.json();
@@ -242,6 +242,11 @@ function openWeeklyReportModal() {
     report += `🛡️ Roadblock Exemptions:   ${weekStats.totalExempt} documented (0 pt tax)\n`;
     report += `⚠️ Undocumented Deferrals: ${weekStats.totalPenalized}\n`;
     report += `Distinct Boards Advanced:  ${weekStats.distinctBoardsCount}\n\n`;
+
+    report += `DEADLINE ACCURACY:\n`;
+    report += `⚡ Early Intercepts:      ${weekStats.weeklyEarly || 0}\n`;
+    report += `🎯 On-Target Clears:      ${weekStats.weeklyOntime || 0}\n`;
+    report += `⚠️ Overdue Clears:        ${weekStats.weeklyOverdue || 0}\n\n`;
 
     report += `CHAOS EMERALD AUDIT:\n`;
     (weekStats.emeralds || []).forEach(e => {
