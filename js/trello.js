@@ -4,9 +4,9 @@ async function trelloFetch(path, method = "GET", queryParams = "") {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) throw new Error("Missing credentials");
   const sep = path.includes("?") ? "&" : "?";
-  const url = `[https://api.trello.com/1$](https://api.trello.com/1$){path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
+  const url = `https://api.trello.com/1${path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
   const res = await fetch(url, { method });
-  if (!res.ok) throw new Error(`Trello API error: ${res.status}`);
+  if (!res.ok) throw new Error(`Trello API error: ${res.status} on ${path}`);
   return res.json();
 }
 
