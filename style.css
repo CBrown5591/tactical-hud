@@ -194,3 +194,83 @@ body { background: var(--bg); color: var(--text); padding: 12px; max-width: 760p
 .cal-ticker-card:hover { border-color: #334155; }
 .cal-badge-busy { background: rgba(239, 68, 68, 0.2) !important; color: #fca5a5 !important; border-color: var(--high) !important; }
 .cal-badge-upcoming { background: rgba(56, 189, 248, 0.15) !important; color: var(--accent) !important; border-color: var(--accent) !important; }
+
+/* --- SONIC TACTICAL SCORECARD & RESULTS SCREEN --- */
+.sonic-scorecard-modal {
+  max-width: 520px;
+  background: linear-gradient(145deg, #0f172a 0%, #070a13 100%) !important;
+  border: 1px solid #38bdf8 !important;
+  box-shadow: 0 0 35px rgba(56, 189, 248, 0.25) !important;
+  position: relative;
+  overflow: hidden;
+}
+.sonic-scorecard-modal::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; height: 3px;
+  background: linear-gradient(90deg, #38bdf8, #a855f7, #38bdf8);
+}
+.sonic-header { text-align: center; margin-bottom: 12px; }
+.sonic-title {
+  font-size: 0.95rem; font-weight: 800; letter-spacing: 2px;
+  color: #38bdf8; text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(56, 189, 248, 0.4);
+}
+.sonic-subtitle { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+
+.sonic-hero-row {
+  display: flex; align-items: center; gap: 16px;
+  background: #090d16; border: 1px solid #1e293b;
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 8px;
+}
+.sonic-rank-container { display: flex; align-items: center; justify-content: center; }
+.sonic-rank-box {
+  width: 64px; height: 64px; border-radius: 14px; border: 3px solid #38bdf8;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2.4rem; font-weight: 900; font-family: monospace;
+  color: #38bdf8; text-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
+  box-shadow: inset 0 0 15px rgba(56, 189, 248, 0.2), 0 0 15px rgba(56, 189, 248, 0.3);
+  animation: pulseRank 2s infinite ease-in-out;
+}
+@keyframes pulseRank {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.03); }
+}
+.sonic-hero-stats { flex: 1; }
+.sonic-rank-title { font-size: 0.75rem; font-weight: 800; letter-spacing: 1px; color: #38bdf8; }
+.sonic-score-val {
+  font-size: 1.6rem; font-weight: 900; letter-spacing: 1px;
+  color: #fff; font-family: monospace; line-height: 1.1; margin: 2px 0;
+}
+.sonic-yield-val { font-size: 0.78rem; font-weight: 700; color: #94a3b8; font-family: monospace; }
+
+.sonic-bar-track {
+  width: 100%; height: 8px; background: #090d16;
+  border-radius: 99px; overflow: hidden; border: 1px solid #1e293b;
+}
+.sonic-bar-fill {
+  height: 100%; background: #38bdf8;
+  box-shadow: 0 0 10px currentColor; transition: width 0.6s ease;
+}
+
+.sonic-section-label {
+  font-size: 0.7rem; font-weight: 800; letter-spacing: 1px;
+  color: var(--muted); margin-bottom: 6px; text-transform: uppercase;
+}
+.sonic-grid-ledger {
+  display: flex; flex-direction: column; gap: 4px;
+  background: #090d16; border: 1px solid #1e293b;
+  border-radius: 8px; padding: 8px 12px; font-size: 0.78rem;
+}
+.sonic-ledger-row {
+  display: grid; grid-template-columns: 1fr auto 70px;
+  align-items: center; gap: 8px; padding: 3px 0;
+}
+.sonic-pts-tag { font-family: monospace; font-weight: 700; text-align: right; }
+
+.sonic-runway-box {
+  background: #090d16; border: 1px solid #1e293b;
+  border-radius: 8px; padding: 8px 12px; font-size: 0.72rem;
+  display: flex; flex-direction: column; gap: 4px; color: var(--muted);
+}
+.sonic-runway-row { display: flex; justify-content: space-between; align-items: center; }
