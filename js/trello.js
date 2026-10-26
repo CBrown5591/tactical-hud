@@ -224,10 +224,21 @@ async function openReportModal() {
     const totalDone = boardResults.reduce((acc, b) => acc + b.doneCards.length, 0);
     const totalWaiting = boardResults.reduce((acc, b) => acc + b.waitingCards.length, 0);
 
+    const weekStats = typeof getWeeklyRollingStats === "function" ? getWeeklyRollingStats() : null;
     let report = `=========================================\n`;
     report += `💼 WORK & GROWTH STATUS REPORT\n`;
     report += `Date: ${todayStr}\n`;
     report += `=========================================\n\n`;
+
+    if (weekStats && weekStats.daysActive > 0) {
+      report += `🏆 TACTICAL EXECUTION SCORECARD\n`;
+      report += `-----------------------------------------\n`;
+      report += `Weekly Performance:   ${weekStats.grade}\n`;
+      report += `Total Productivity:   ${weekStats.totalScore} PTS\n`;
+      report += `Average Yield Rate:   ${weekStats.avgYield} PTS / FOCUS HR\n`;
+      report += `Completed Breakdown:  ${weekStats.totalRed} Heavy | ${weekStats.totalYellow} Med | ${weekStats.totalGreen} Light\n`;
+      report += `Roadblocks Logged:    ${weekStats.totalExempt} Exempt | ${weekStats.totalPenalized} Penalized\n\n`;
+    }
 
     report += `✅ COMPLETED TASKS (${totalDone})\n`;
     report += `-----------------------------------------\n`;
