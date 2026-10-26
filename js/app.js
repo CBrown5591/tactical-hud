@@ -18,6 +18,7 @@ let state = {
   captureDue: "",
   captureRecur: "none",
   saveStateCardId: null,
+  scoreLedgerCardId: null,
   activeNoteCard: null,
   boardCache: {},
   todayCards: [],
@@ -31,13 +32,14 @@ function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
   const now = new Date();
   const day = now.getDay();
-  const isWeekend = (day === 0 || day === 6);
+  const isWeekend = (day === 0 || day === 6); // 0 = Sunday, 6 = Saturday
   const isOff = (calData && calData.isWorkOffDay) || isWeekend;
 
   const bookedHours = isWork
     ? (calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0)
     : (calData ? (calData.bookedHours ?? 0) : 0);
 
+  // Option A: If viewing Work HUD on a weekend or off-day (vacation, PTO, RDO), lock capacity to 0
   if (isWork && isOff) {
     let offLabel = "🌴 SCHEDULED OFF DAY (WORK LOCKED)";
     if (isWeekend) {
@@ -56,11 +58,11 @@ function calculateEnergyQuotas(calData = null) {
   let maxGreen = 2;
 
   if (bookedHours > 6.0) {
-    maxRed = 0; maxYellow = 0; maxGreen = 2;
+    maxRed = 0; maxYellow = 0; maxGreen = 2; // Locked / high meeting load
   } else if (bookedHours > 4.0) {
-    maxRed = 0; maxYellow = 1; maxGreen = 2;
+    maxRed = 0; maxYellow = 1; maxGreen = 2; // Heavy meeting day (3 tasks max)
   } else if (bookedHours > 2.0) {
-    maxRed = 0; maxYellow = 2; maxGreen = 2;
+    maxRed = 0; maxYellow = 2; maxGreen = 2; // Moderate meeting load (convert Heavy to Medium)
   }
 
   const total = maxRed + maxYellow + maxGreen;
@@ -75,6 +77,7 @@ function determineAutoContext(cfg, calTelemetry = null) {
     return params.get("context");
   }
 
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
   if (calTelemetry && calTelemetry.isWorkOffDay) {
     return "personal";
   }
@@ -180,7 +183,6 @@ function setEnergyFilter(energy) {
   renderCards();
 }
 
-// --- UNIFIED CROSS-BOARD AUTO-PROMOTE & QUOTA ENFORCER ---
 async function autoPromoteCards(results) {
   let changedAny = false;
   const allCardsMap = {};
@@ -218,20 +220,25 @@ async function autoPromoteCards(results) {
   });
 
   // --- PHASE 2: OVERFLOW REBALANCING (DEMOTE EXCESS BASED ON PRIORITY) ---
+  // If Today already has more cards of a tier than quota permits (e.g. 2 Reds):
+  // Work retains the slot; lower-priority board (Growth) is demoted back to its Queue.
   for (const energy of ["red", "yellow", "green"]) {
     const matching = todayEntries.filter(e => e.energy === energy);
     const maxAllowed = quotas[energy] || 0;
 
     if (matching.length > maxAllowed) {
+      // Sort matching today cards: lowest priority board gets demoted first
       matching.sort((a, b) => {
         const prioA = getBoardPriorityIdx(a.boardKey);
         const prioB = getBoardPriorityIdx(b.boardKey);
         if (prioA !== prioB) return prioA - prioB; // lower index = higher priority to keep
+        // If same board, earlier due date kept first
         const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
         const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
         return dueA - dueB;
       });
 
+      // Cards beyond maxAllowed are demoted back to Queue
       const toDemote = matching.slice(maxAllowed);
       for (const entry of toDemote) {
         if (entry.listMap.queue) {
@@ -239,10 +246,11 @@ async function autoPromoteCards(results) {
             await trelloFetch(`/cards/${entry.card.id}`, "PUT", `&idList=${entry.listMap.queue}&pos=top`);
             entry.card.idList = entry.listMap.queue;
             if (allCardsMap[entry.card.id]) allCardsMap[entry.card.id].idList = entry.listMap.queue;
+            // Remove from todayEntries list
             const idx = todayEntries.findIndex(e => e.card.id === entry.card.id);
             if (idx !== -1) todayEntries.splice(idx, 1);
             changedAny = true;
-            console.log(`[Quota Enforcer] Demoted overflow ${entry.energy} task "${entry.card.name}" from [${entry.boardKey}] back to Queue.`);
+            console.log(`[Quota Enforcer] Demoted overflow ${entry.energy} task "${entry.card.name}" from ${entry.boardKey} back to Queue.`);
           } catch (e) {
             console.error("Failed to demote overflow card:", entry.card.id, e);
           }
@@ -267,6 +275,7 @@ async function autoPromoteCards(results) {
   if (totalSlots === 0) return changedAny;
 
   // --- PHASE 4: UNIFIED MULTI-BOARD PROMOTION ---
+  // Collect all eligible unblocked queue cards from all active boards
   const queueCandidates = [];
   results.forEach(({ boardKey, listMap, cards }) => {
     if (!listMap.queue || !listMap.today) return;
@@ -281,10 +290,14 @@ async function autoPromoteCards(results) {
     });
   });
 
+  // Sort unified candidates:
+  // 1. Board Priority (Work > Growth in Work mode; Life > VI > Lab > Growth in Personal mode)
+  // 2. Due Date (Earliest deadline first)
+  // 3. Pos / ID
   queueCandidates.sort((a, b) => {
     const prioA = getBoardPriorityIdx(a.boardKey);
     const prioB = getBoardPriorityIdx(b.boardKey);
-    if (prioA !== prioB) return prioA - prioB; // Primary board (Work) claims slots first
+    if (prioA !== prioB) return prioA - prioB;
 
     const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
     const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
@@ -293,6 +306,7 @@ async function autoPromoteCards(results) {
     return parseInt(a.card.id.substring(0, 8), 16) - parseInt(b.card.id.substring(0, 8), 16);
   });
 
+  // Promote in strict priority order against open global slots
   for (const candidate of queueCandidates) {
     if (totalSlots === 0) break;
     const col = candidate.energy;
@@ -319,16 +333,19 @@ async function syncHud() {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
 
+  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day") and work-hour meeting load
   const calData = await fetchCalendarTelemetry();
   if (!state.manualOverride) state.context = determineAutoContext(cfg, calData);
   applyTheme();
 
+  // Re-calculate energy quotas for the resolved context
   state.energyQuotas = calculateEnergyQuotas(calData);
 
   const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {
+    // Resilient board fetching: If one board fails (e.g. 404 or access revoked), don't crash the other boards
     const boardPromises = validTargets.map(async k => {
       try {
         return await fetchBoardData(k, cfg.boards[k]);
@@ -352,6 +369,7 @@ async function syncHud() {
     state.inboxCards = [];
     state.allLoadedCards = [];
     state.saveStateCardId = null;
+    state.scoreLedgerCardId = null;
 
     const allCardsMap = {};
     for (const { listMap, cards } of results) {
@@ -372,6 +390,22 @@ async function syncHud() {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
             state.saveStateCardId = card.id;
             document.getElementById("saveStateInput").value = card.desc || "";
+          }
+          return;
+        }
+        if (card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("⚡ SCORE LEDGER")) {
+          if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
+            state.scoreLedgerCardId = card.id;
+            if (card.desc && card.desc.trim().startsWith("{")) {
+              try {
+                const remote = JSON.parse(card.desc.trim());
+                if (typeof adoptRemoteScoreLedger === "function") {
+                  adoptRemoteScoreLedger(remote);
+                }
+              } catch (e) {
+                console.warn("[Score Cloud Sync] Failed to parse remote ledger:", e);
+              }
+            }
           }
           return;
         }
@@ -421,20 +455,29 @@ async function syncHud() {
       });
     });
 
+    // Auto-create 📊 SCORE LEDGER card on primary board if it doesn't exist yet
+    if (!state.scoreLedgerCardId) {
+      const primaryRes = results.find(r => (state.context === "work" && r.boardKey === "work") || (state.context === "personal" && r.boardKey === "life"));
+      if (primaryRes && primaryRes.listMap) {
+        const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
+        if (targetList) {
+          try {
+            const initialPayload = JSON.stringify(loadDailyScoreLedger());
+            const newLedgerCard = await trelloFetch('/cards', 'POST', `&idList=${targetList}&name=${encodeURIComponent("📊 SCORE LEDGER")}&desc=${encodeURIComponent(initialPayload)}&pos=bottom`);
+            state.scoreLedgerCardId = newLedgerCard.id;
+            console.log("[Score Cloud Sync] Auto-created 📊 SCORE LEDGER card on Trello:", newLedgerCard.id);
+          } catch (e) {
+            console.warn("[Score Cloud Sync] Could not auto-create 📊 SCORE LEDGER card:", e);
+          }
+        }
+      }
+    }
+
     renderCards();
     updateQuickCaptureBlockerDropdown();
   } catch (err) {
-    console.error("[HUD Sync Exception]:", err);
-    const detail = err && err.message ? err.message : String(err);
-    document.getElementById("todayList").innerHTML = `
-      <div class="empty-state" style="color:#f87171; text-align:left; padding:12px;">
-        <div style="font-weight:700; margin-bottom:4px;">⚠️ API Sync Error Detected</div>
-        <div style="font-family:monospace; font-size:0.75rem; background:#090d16; padding:8px; border-radius:6px; border:1px solid #7f1d1d; color:#fca5a5; word-break:break-all;">
-          ${escapeHtml(detail)}
-        </div>
-        <div style="font-size:0.7rem; color:#94a3b8; margin-top:6px;">Check board permissions and token validity in ⚙️ Settings.</div>
-      </div>
-    `;
+    console.error(err);
+    document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
   }
 }
 
@@ -684,6 +727,7 @@ async function fetchCalendarTelemetry() {
       return null;
     }
 
+    // Update global state and dynamic quotas based on booked meeting hours & off-day flag
     state.calendarTelemetry = data;
     state.energyQuotas = calculateEnergyQuotas(data);
 
