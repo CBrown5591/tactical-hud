@@ -14,6 +14,7 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
   } catch (e) {}
   return {
     date: dateStr,
+    updatedAt: 0,
     completed: { red: 0, yellow: 0, green: 0, none: 0 },
     completedCardIds: [],
     completedBoards: [],
@@ -49,39 +50,35 @@ function adoptRemoteScoreLedger(remoteLedger) {
 
   const local = loadDailyScoreLedger(todayStr);
 
-  const allCardIds = Array.from(new Set([...(local.completedCardIds || []), ...(remoteLedger.completedCardIds || [])]));
-  const allBoards = Array.from(new Set([...(local.completedBoards || []), ...(remoteLedger.completedBoards || [])]));
+  const localTime = local.updatedAt || 0;
+  const remoteTime = remoteLedger.updatedAt || 0;
 
-  const merged = {
-    date: todayStr,
-    completed: {
-      red: Math.max(local.completed?.red || 0, remoteLedger.completed?.red || 0),
-      yellow: Math.max(local.completed?.yellow || 0, remoteLedger.completed?.yellow || 0),
-      green: Math.max(local.completed?.green || 0, remoteLedger.completed?.green || 0),
-      none: Math.max(local.completed?.none || 0, remoteLedger.completed?.none || 0)
-    },
-    completedCardIds: allCardIds,
-    completedBoards: allBoards,
-    deadlineModifiers: {
-      earlyCount: Math.max(local.deadlineModifiers?.earlyCount || 0, remoteLedger.deadlineModifiers?.earlyCount || 0),
-      earlyPts: Math.max(local.deadlineModifiers?.earlyPts || 0, remoteLedger.deadlineModifiers?.earlyPts || 0),
-      ontimeCount: Math.max(local.deadlineModifiers?.ontimeCount || 0, remoteLedger.deadlineModifiers?.ontimeCount || 0),
-      ontimePts: Math.max(local.deadlineModifiers?.ontimePts || 0, remoteLedger.deadlineModifiers?.ontimePts || 0),
-      overdueCount: Math.max(local.deadlineModifiers?.overdueCount || 0, remoteLedger.deadlineModifiers?.overdueCount || 0),
-      overduePts: Math.min(local.deadlineModifiers?.overduePts || 0, remoteLedger.deadlineModifiers?.overduePts || 0)
-    },
-    deferralsExempt: Math.max(local.deferralsExempt || 0, remoteLedger.deferralsExempt || 0),
-    deferralsPenalized: Math.max(local.deferralsPenalized || 0, remoteLedger.deferralsPenalized || 0),
-    deferredCards: Array.from(new Set([...(local.deferredCards || []), ...(remoteLedger.deferredCards || [])])),
-    chaosControlCount: Math.max(local.chaosControlCount || 0, remoteLedger.chaosControlCount || 0)
-  };
-
-  saveDailyScoreLedger(merged, todayStr, false);
-  console.log("[Score Cloud Sync] Successfully adopted remote Trello ledger onto this device:", merged);
+  // Authoritative adoption: newer timestamp wins completely
+  if (remoteTime >= localTime || !local.updatedAt) {
+    const cleanLedger = {
+      date: todayStr,
+      updatedAt: remoteTime || Date.now(),
+      completed: remoteLedger.completed || { red: 0, yellow: 0, green: 0, none: 0 },
+      completedCardIds: remoteLedger.completedCardIds || [],
+      completedBoards: remoteLedger.completedBoards || [],
+      deadlineModifiers: remoteLedger.deadlineModifiers || {
+        earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0
+      },
+      deferralsExempt: remoteLedger.deferralsExempt || 0,
+      deferralsPenalized: remoteLedger.deferralsPenalized || 0,
+      deferredCards: remoteLedger.deferredCards || [],
+      chaosControlCount: remoteLedger.chaosControlCount || 0
+    };
+    saveDailyScoreLedger(cleanLedger, todayStr, false);
+    console.log("[Score Cloud Sync] Authoritative remote ledger adopted:", cleanLedger);
+  } else {
+    pushScoreLedgerToTrello(local);
+  }
 }
 
 function saveDailyScoreLedger(ledger, dateStr = getTodayScoreDateStr(), pushToCloud = true) {
   try {
+    ledger.updatedAt = Date.now();
     localStorage.setItem(SCORE_STORAGE_KEY_PREFIX + dateStr, JSON.stringify(ledger));
     if (pushToCloud) {
       pushScoreLedgerToTrello(ledger);
@@ -99,7 +96,6 @@ function calculateDeadlineModifier(energy = "green", dueStr = "") {
   const dueDate = new Date(dueStr);
   const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-  // Scaled lookup table by energy level: [Early, On-Target, Overdue/day, Floor]
   const tierConfig = {
     red:    { early: 50, ontime: 25, penaltyPerDay: 25, floor: 25 },
     yellow: { early: 25, ontime: 15, penaltyPerDay: 15, floor: 10 },
@@ -123,7 +119,7 @@ function calculateDeadlineModifier(energy = "green", dueStr = "") {
 function recordCardCompleted(card) {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
-  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return; // Prevent double counting
+  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return;
 
   if (!ledger.completedCardIds) ledger.completedCardIds = [];
   ledger.completedCardIds.push(card.id);
@@ -140,7 +136,6 @@ function recordCardCompleted(card) {
     ledger.completed.none++;
   }
 
-  // Calculate & record Tier-Scaled Deadline Modifier
   if (!ledger.deadlineModifiers) {
     ledger.deadlineModifiers = { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
   }
@@ -190,13 +185,11 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   const greenPts = (ledger.completed.green || 0) * 25;
   const penaltyPts = (ledger.deferralsPenalized || 0) * 15;
 
-  // Deadline Modifiers
   const dMods = ledger.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
   const deadlineNetPts = (dMods.earlyPts || 0) + (dMods.ontimePts || 0) + (dMods.overduePts || 0);
 
   const rawScore = Math.max(0, redPts + yellowPts + greenPts + deadlineNetPts - penaltyPts);
 
-  // Runway normalization (8:00 AM - 5:00 PM = 9.0h window)
   const isWork = state && state.context === "work";
   const now = new Date();
   const day = now.getDay();
@@ -228,7 +221,6 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
   const yieldRate = netRunway > 0 ? +(rawScore / netRunway).toFixed(1) : 0;
 
-  // Evaluation Ranks: S (Sonic), A, B, C, D
   let rank = "B";
   let title = "STEADY CRUISE";
   let rankColor = "#eab308";
@@ -279,7 +271,6 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   };
 }
 
-// --- 7 CHAOS EMERALDS WEEKLY MILESTONES ---
 function evaluateChaosEmeralds(weekStats) {
   const green = weekStats.totalGreen >= 6;
   const yellow = weekStats.totalYellow >= 4;
@@ -389,7 +380,6 @@ function getWeeklyRollingStats() {
   };
 }
 
-// --- MODALS & UI HANDLERS ---
 function openDebriefModal() {
   const ledger = loadDailyScoreLedger();
   const cal = state.calendarTelemetry || {};
@@ -408,7 +398,6 @@ function openDebriefModal() {
   document.getElementById("dbScoreDisplay").textContent = `${stats.rawScore} PTS`;
   document.getElementById("dbYieldDisplay").textContent = `${stats.yieldRate} PTS / FOCUS HR`;
 
-  // Energy Tier Points
   document.getElementById("dbRedCount").textContent = `${ledger.completed.red || 0}`;
   document.getElementById("dbRedPts").textContent = `+${stats.redPts}`;
   document.getElementById("dbYellowCount").textContent = `${ledger.completed.yellow || 0}`;
@@ -416,7 +405,6 @@ function openDebriefModal() {
   document.getElementById("dbGreenCount").textContent = `${ledger.completed.green || 0}`;
   document.getElementById("dbGreenPts").textContent = `+${stats.greenPts}`;
 
-  // Deadline Modifiers Breakdown
   const dMods = stats.dMods || { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
   const earlyEl = document.getElementById("dbEarlyCount");
   if (earlyEl) earlyEl.textContent = `${dMods.earlyCount || 0}`;
@@ -433,12 +421,10 @@ function openDebriefModal() {
   const overduePtsEl = document.getElementById("dbOverduePts");
   if (overduePtsEl) overduePtsEl.textContent = dMods.overduePts < 0 ? `${dMods.overduePts}` : `0`;
 
-  // Roadblocks & Deferrals
   document.getElementById("dbExemptCount").textContent = `${ledger.deferralsExempt || 0}`;
   document.getElementById("dbPenalizedCount").textContent = `${ledger.deferralsPenalized || 0}`;
   document.getElementById("dbPenaltyPts").textContent = stats.penaltyPts > 0 ? `-${stats.penaltyPts}` : `0`;
 
-  // Normalization details
   document.getElementById("dbRunwayBase").textContent = `${stats.totalRunway.toFixed(2)}h`;
   document.getElementById("dbMeetingsBooked").textContent = `-${stats.meetingHours.toFixed(2)}h`;
   document.getElementById("dbDecompTax").textContent = `-${stats.decompressionTax.toFixed(2)}h`;
@@ -451,9 +437,7 @@ function openDebriefModal() {
     barEl.style.backgroundColor = stats.rankColor;
   }
 
-  // Render Chaos Emerald Tracker Strip in Debrief
   renderEmeraldStrip("dbEmeraldStrip", weekStats);
-
   modal.classList.add("open");
 }
 
@@ -503,12 +487,13 @@ async function confirmDeferral(isDocumented) {
   const modal = document.getElementById("deferralModal");
   const cardId = modal.dataset.cardId;
   const boardKey = modal.dataset.boardKey;
-  const reason = document.getElementById("deferralReasonInput").value.trim();
+  let reason = document.getElementById("deferralReasonInput").value.trim();
   closeDeferralModal();
 
   const card = state.allLoadedCards.find(c => c.id === cardId);
 
-  if (isDocumented && reason) {
+  if (isDocumented) {
+    if (!reason) reason = "Documented Roadblock";
     try {
       const commentText = `🛑 ROADBLOCK DEFERRED: ${reason}`;
       await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent(commentText)}`);
@@ -523,7 +508,6 @@ async function confirmDeferral(isDocumented) {
   await moveCard(cardId, boardKey, 'waiting');
 }
 
-// --- PUSH NOTIFICATION TELEMETRY ENGINE ---
 async function requestPushNotificationPermission() {
   if (!("Notification" in window)) {
     alert("Push Notifications are not supported in this browser.");
