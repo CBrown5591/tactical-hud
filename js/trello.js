@@ -2,19 +2,15 @@
 
 async function trelloFetch(path, method = "GET", queryParams = "") {
   const cfg = loadConfig();
-  if (!cfg || !cfg.apiKey || !cfg.token) throw new Error("Missing credentials");
+  if (!cfg || !cfg.apiKey || !cfg.token) throw new Error("Missing credentials in ⚙️ Settings");
   const sep = path.includes("?") ? "&" : "?";
   const url = `https://api.trello.com/1${path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
   const res = await fetch(url, { method });
-  if (!res.ok) throw new Error(`Trello API error: ${res.status} on ${path}`);
-  return res.json();
-}
-
-async function fetchBoardData(boardKey, boardId) {
-  const [lists, cards, labels] = await Promise.all([
-    trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
-    trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos,shortUrl,shortLink&actions=commentCard&actions_limit=5&pluginData=true&attachments=true"),
-    trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
+  if (!res.ok) {
+    let errBody = "";
+    try { errBody = await res.text(); } catch (e) {}
+    throw new Error(`HTTP ${res.status} on${path}${errBody ? ` (${errBody.trim()})` : ""}`); } return res.json(); }  async function fetchBoardData(boardKey, boardId) { const [lists, cards, labels] = await Promise.all([ trelloFetch(`/boards/${boardId}/lists`, "GET", "&fields=name,id"),
+    trelloFetch(`/boards/${boardId}/cards`, "GET", "&fields=name,id,idList,labels,desc,due,pos,shortUrl,shortLink&actions=commentCard&actions_limit=5&pluginData=true&attachments=true"), trelloFetch(`/boards/${boardId}/labels`, "GET", "&fields=name,id,color")
   ]);
   const listMap = {};
   lists.forEach(l => {
@@ -127,8 +123,7 @@ async function openReportModal() {
   try {
     const boardResults = await Promise.all(targetBoards.map(async b => {
       const [lists, cards] = await Promise.all([
-        trelloFetch(`/boards/${b.id}/lists`, "GET", "&fields=name,id"),
-        trelloFetch(`/boards/${b.id}/cards`, "GET", "&fields=name,id,idList,desc,dateLastActivity,labels&actions=commentCard&actions_limit=3")
+        trelloFetch(`/boards/${b.id}/lists`, "GET", "&fields=name,id"), trelloFetch(`/boards/${b.id}/cards`, "GET", "&fields=name,id,idList,desc,dateLastActivity,labels&actions=commentCard&actions_limit=3")
       ]);
       const doneListIds = lists.filter(l => l.name.toLowerCase().includes("done")).map(l => l.id);
       const waitingListIds = lists.filter(l => l.name.toLowerCase().includes("waiting")).map(l => l.id);
@@ -146,40 +141,18 @@ async function openReportModal() {
     report += `Generated: ${todayStr}\n`;
     report += `=========================================\n\n`;
 
-    report += `✅ COMPLETED TASKS (${totalDone})\n`;
-    report += `-----------------------------------------\n`;
-    if (totalDone === 0) {
-      report += `(No tasks currently marked Done)\n\n`;
-    } else {
-      boardResults.forEach(b => {
-        if (b.doneCards.length > 0) {
-          report += `[${b.boardName}]\n`;
+    report += `✅ COMPLETED TASKS (${totalDone})\n`; report += `-----------------------------------------\n`; if (totalDone === 0) { report += `(No tasks currently marked Done)\n\n`; } else { boardResults.forEach(b => { if (b.doneCards.length > 0) { report += `[${b.boardName}]\n`;
           b.doneCards.forEach(c => {
-            report += `• ${c.name}\n`;
-            const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
-              ? c.actions[0].data.text
-              : (c.desc && c.desc.trim() ? c.desc.trim() : "");
-            if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
+            report += `• ${c.name}\n`; const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text) ? c.actions[0].data.text : (c.desc && c.desc.trim() ? c.desc.trim() : ""); if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
           });
           report += `\n`;
         }
       });
     }
 
-    report += `⏳ WAITING / BLOCKED TASKS (${totalWaiting})\n`;
-    report += `-----------------------------------------\n`;
-    if (totalWaiting === 0) {
-      report += `(No tasks currently in Waiting)\n\n`;
-    } else {
-      boardResults.forEach(b => {
-        if (b.waitingCards.length > 0) {
-          report += `[${b.boardName}]\n`;
+    report += `⏳ WAITING / BLOCKED TASKS (${totalWaiting})\n`; report += `-----------------------------------------\n`; if (totalWaiting === 0) { report += `(No tasks currently in Waiting)\n\n`; } else { boardResults.forEach(b => { if (b.waitingCards.length > 0) { report += `[${b.boardName}]\n`;
           b.waitingCards.forEach(c => {
-            report += `• ${c.name}\n`;
-            const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text)
-              ? c.actions[0].data.text
-              : (c.desc && c.desc.trim() ? c.desc.trim() : "");
-            if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
+            report += `• ${c.name}\n`; const latestComment = (c.actions && c.actions[0] && c.actions[0].data && c.actions[0].data.text) ? c.actions[0].data.text : (c.desc && c.desc.trim() ? c.desc.trim() : ""); if (latestComment) report += `  Notes: ${latestComment.replace(/\n/g, "\n  ")}\n`;
           });
           report += `\n`;
         }
@@ -243,21 +216,15 @@ function openWeeklyReportModal() {
     report += `⚠️ Undocumented Deferrals: ${weekStats.totalPenalized}\n`;
     report += `Distinct Boards Advanced:  ${weekStats.distinctBoardsCount}\n\n`;
 
-    report += `DEADLINE ACCURACY:\n`;
-    report += `⚡ Early Intercepts:      ${weekStats.weeklyEarly || 0}\n`;
-    report += `🎯 On-Target Clears:      ${weekStats.weeklyOntime || 0}\n`;
-    report += `⚠️ Overdue Clears:        ${weekStats.weeklyOverdue || 0}\n\n`;
-
     report += `CHAOS EMERALD AUDIT:\n`;
     (weekStats.emeralds || []).forEach(e => {
-      report += `${e.icon} ${e.name} (${e.domain}): ${e.unlocked ? 'CLAIMED ✓' : 'LOCKED — ' + e.criteria}\n`;
+      report += `${e.icon}${e.name} (${e.domain}):${e.unlocked ? 'CLAIMED ✓' : 'LOCKED — ' + e.criteria}\n`;
     });
   }
 
   report += `\n=========================================\nTactical Focus HUD • Executive Telemetry\n`;
   contentBox.value = report;
 
-  // Update visual modal UI elements
   const emeraldContainer = document.getElementById("weeklyEmeraldDisplay");
   if (emeraldContainer && weekStats) {
     renderEmeraldStrip("weeklyEmeraldDisplay", weekStats);
