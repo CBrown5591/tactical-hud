@@ -76,7 +76,7 @@ function determineAutoContext(cfg, calTelemetry = null) {
     return params.get("context");
   }
 
-  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO, Vacation), automatically route to Personal HUD
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
   if (calTelemetry && calTelemetry.isWorkOffDay) {
     return "personal";
   }
@@ -253,12 +253,12 @@ async function syncHud() {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) return openSettings();
 
-  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day", PTO, Vacation) and meeting load
+  // 1. Fetch calendar telemetry first to detect off-days ("Charles Off Day") and work-hour meeting load
   const calData = await fetchCalendarTelemetry();
   if (!state.manualOverride) state.context = determineAutoContext(cfg, calData);
   applyTheme();
 
-  // Re-calculate energy quotas for the resolved context (handles Option A weekend/vacation lock)
+  // Re-calculate energy quotas for the resolved context
   state.energyQuotas = calculateEnergyQuotas(calData);
 
   const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
@@ -276,6 +276,223 @@ async function syncHud() {
 
     const allCardsMap = {};
     for (const { listMap, cards } of results) {
+      for (const c of cards) {
+        allCardsMap[c.id] = {
+          id: c.id,
+          name: c.name,
+          shortLink: c.shortLink,
+          idList: c.idList,
+          isDone: (c.idList === listMap.done)
+        };
+      }
+    }
+
+    results.forEach(({ boardKey, listMap, cards }) => {
+      cards.forEach(card => {
+        if (card.name.startsWith("🎯 SAVE STATE")) {
+          if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
+            state.saveStateCardId = card.id;
+            document.getElementById("saveStateInput").value = card.desc || "";
+          }
+          return;
+        }
+        const energyColor = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+        const commentsList = (card.actions && Array.isArray(card.actions))
+          ? card.actions.filter(a => a.type === "commentCard" && a.data && a.data.text).map(a => ({
+              id: a.id,
+              text: a.data.text,
+              date: a.date
+            }))
+          : [];
+        const latestNote = commentsList.length > 0 ? commentsList[0].text : (card.desc || "");
+        const rels = extractCardRelations(card, allCardsMap);
+        const activeBlockers = [];
+        if (rels.blockedBy && rels.blockedBy.length > 0) {
+          for (const b of rels.blockedBy) {
+            const blockerCard = allCardsMap[b.id] || Object.values(allCardsMap).find(c => c.shortLink === b.id);
+            if (blockerCard && !blockerCard.isDone) {
+              activeBlockers.push(b.name || blockerCard.name);
+            }
+          }
+        }
+
+        const item = {
+          id: card.id,
+          name: card.name,
+          desc: card.desc || "",
+          due: card.due || "",
+          notes: latestNote,
+          comments: commentsList,
+          boardKey,
+          boardName: BOARD_LABELS[boardKey],
+          energy: energyColor,
+          labels: card.labels || [],
+          shortUrl: card.shortUrl || `https://trello.com/c/${card.id}`,
+          relations: rels,
+          blockers: activeBlockers,
+          attachments: card.attachments || []
+        };
+        
+        if (card.idList !== listMap.done) {
+          state.allLoadedCards.push(item);
+        }
+
+        if (card.idList === listMap.today) state.todayCards.push(item);
+        else if (card.idList === listMap.inbox) state.inboxCards.push(item);
+      });
+    });
+
+    renderCards();
+    updateQuickCaptureBlockerDropdown();
+  } catch (err) {
+    console.error(err);
+    document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
+  }
+}
+
+function renderCards() {
+  const filterFn = c => state.energyFilter === "all" || c.energy === state.energyFilter;
+  const todayFiltered = state.todayCards.filter(filterFn);
+  const inboxFiltered = state.inboxCards.filter(filterFn);
+
+  const quotas = state.energyQuotas || { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" };
+  const todayLabel = document.getElementById("todaySectionLabel");
+  if (todayLabel) todayLabel.textContent = `⚡ TODAY'S LOAD (${quotas.label})`;
+
+  const wipEl = document.getElementById("todayCount");
+  wipEl.textContent = `${state.todayCards.length} / ${quotas.total}`;
+  wipEl.classList.toggle("over", state.todayCards.length > quotas.total);
+  document.getElementById("inboxCount").textContent = state.inboxCards.length;
+
+  const todayContainer = document.getElementById("todayList");
+  todayContainer.innerHTML = todayFiltered.length ? "" : `<div class="empty-state">No cards matching filter in ⚡ Today.</div>`;
+  todayFiltered.forEach(c => {
+    const el = document.createElement("div");
+    el.className = `task-card energy-${c.energy}`;
+    const noteSnippet = c.notes ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>` : "";
+    const blockerTag = (c.blockers && c.blockers.length > 0) ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>` : "";
+
+    let dueTag = "";
+    if (c.due && typeof calculateDeadlineModifier === "function") {
+      const mod = calculateDeadlineModifier(c.energy, c.due);
+      const modColor = mod.type === "early" ? "#38bdf8" : (mod.type === "ontime" ? "#22c55e" : "#f43f5e");
+      dueTag = `<span style="background:#090d16; border:1px solid ${modColor}; color:${modColor}; padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700;">📅 ${mod.label}</span>`;
+    }
+
+    el.innerHTML = `
+      <div class="task-info">
+        <div class="task-title">${escapeHtml(c.name)}</div>
+        <div class="task-meta">
+          <span class="board-tag">${c.boardName}</span>
+          ${dueTag}
+          ${blockerTag}
+        </div>
+        ${noteSnippet}
+      </div>
+      <div class="task-actions">
+        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
+        <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
+        <button class="icon-btn done" title="Complete Task" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
+      </div>
+    `;
+    todayContainer.appendChild(el);
+  });
+
+  const inboxContainer = document.getElementById("inboxList");
+  inboxContainer.innerHTML = inboxFiltered.length ? "" : `<div class="empty-state">📥 Inbox clear!</div>`;
+  inboxFiltered.forEach(c => {
+    const el = document.createElement("div");
+    el.className = `task-card energy-${c.energy}`;
+    el.innerHTML = `
+      <div class="task-info">
+        <div class="task-title">${escapeHtml(c.name)}</div>
+        <div class="task-meta">
+          <span class="board-tag">${c.boardName}</span>
+          <span class="energy-picker" title="Assign Energy Quota">
+            <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
+            <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
+            <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
+          </span>
+        </div>
+      </div>
+      <div class="task-actions">
+        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
+        <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
+        <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
+        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
+      </div>
+    `;
+    inboxContainer.appendChild(el);
+  });
+}
+
+function renderModalComments(comments) {
+  const historyContainer = document.getElementById("cardCommentsHistory");
+  if (!comments || comments.length === 0) {
+    historyContainer.innerHTML = `<div class="empty-state" style="padding:8px 0;">No comments logged yet.</div>`;
+    return;
+  }
+  historyContainer.innerHTML = comments.map(cm => {
+    const dateStr = cm.date ? new Date(cm.date).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+    return `
+      <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:7px 10px; font-size:0.75rem;">
+        <div style="color:#cbd5e1; white-space:pre-wrap; word-break:break-word;">${escapeHtml(cm.text)}</div>
+        <div style="font-size:0.65rem; color:var(--muted); margin-top:3px; text-align:right;">${dateStr}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function getCardRecurCadence(card) {
+  if (!card || !card.labels) return "none";
+  for (const lb of card.labels) {
+    const name = (lb.name || "").toLowerCase();
+    if (name.includes("twice daily") || name.includes("2x daily") || name.includes("twicedaily")) return "twicedaily";
+    if (name.includes("daily")) return "daily";
+    if (name.includes("bi-weekly") || name.includes("biweekly")) return "biweekly";
+    if (name.includes("weekly")) return "weekly";
+    if (name.includes("monthly")) return "monthly";
+  }
+  return "none";
+}
+
+function updateModalRecurPills(card) {
+  const currentRecur = getCardRecurCadence(card);
+  const map = {
+    none: "modalRecurNone",
+    twicedaily: "modalRecurTwiceDaily",
+    daily: "modalRecurDaily",
+    weekly: "modalRecurWeekly",
+    biweekly: "modalRecurBiweekly",
+    monthly: "modalRecurMonthly"
+  };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (el) el.classList.toggle("active", k === currentRecur);
+  });
+}
+
+async function setCardRecurCadence(newCadence) {
+  if (!state.activeNoteCard) return;
+  const { id, boardKey } = state.activeNoteCard;
+  const cache = state.boardCache[boardKey];
+  const card = state.allLoadedCards.find(c => c.id === id);
+  if (!cache || !card) return;
+
+  const recurKeywords = ["twice daily", "2x daily", "twicedaily", "daily", "weekly", "bi-weekly", "biweekly", "monthly"];
+  const preservedLabelIds = (card.labels || [])
+    .filter(l => !recurKeywords.some(kw => (l.name || "").toLowerCase().includes(kw)))
+    .map(l => l.id);
+
+  if (newCadence !== "none" && cache.recurLabelMap && cache.recurLabelMap[newCadence]) {
+    preservedLabelIds.push(cache.recurLabelMap[newCadence]);
+  }
+
+  try {
+    await trelloFetch(`/cards/${id}`, "PUT", `&idLabels=${preservedLabelIds.join(",")}`);
+    await syncHud();
+    const updated = state.allLoadedCards.find(c => c.id === id);
+    if (updated) updateModalRecurPills(updrds } of results) {
       for (const c of cards) {
         allCardsMap[c.id] = {
           id: c.id,
