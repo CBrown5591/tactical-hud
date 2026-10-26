@@ -1,4 +1,4 @@
-// --- js/score.js: Tactical Focus HUD Scoring, Emerald Mastery & Deadline Engine ---
+// --- js/score.js: Tactical Focus HUD Scoring, Emerald Mastery & Cloud Ledger Engine ---
 
 const SCORE_STORAGE_KEY_PREFIX = "TACTICAL_SCORE_LEDGER_";
 
@@ -25,9 +25,67 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
   };
 }
 
-function saveDailyScoreLedger(ledger, dateStr = getTodayScoreDateStr()) {
+let _scorePushTimeout = null;
+function pushScoreLedgerToTrello(ledger = loadDailyScoreLedger()) {
+  if (!state || !state.scoreLedgerCardId) return;
+  if (typeof trelloFetch !== "function") return;
+
+  if (_scorePushTimeout) clearTimeout(_scorePushTimeout);
+  _scorePushTimeout = setTimeout(async () => {
+    try {
+      const payload = JSON.stringify(ledger);
+      await trelloFetch(`/cards/${state.scoreLedgerCardId}`, "PUT", `&desc=${encodeURIComponent(payload)}`);
+      console.log("[Score Cloud Sync] Pushed score ledger to Trello card:", ledger);
+    } catch (e) {
+      console.warn("[Score Cloud Sync] Failed to push ledger to Trello:", e);
+    }
+  }, 350);
+}
+
+function adoptRemoteScoreLedger(remoteLedger) {
+  if (!remoteLedger || !remoteLedger.date) return;
+  const todayStr = getTodayScoreDateStr();
+  if (remoteLedger.date !== todayStr) return;
+
+  const local = loadDailyScoreLedger(todayStr);
+
+  const allCardIds = Array.from(new Set([...(local.completedCardIds || []), ...(remoteLedger.completedCardIds || [])]));
+  const allBoards = Array.from(new Set([...(local.completedBoards || []), ...(remoteLedger.completedBoards || [])]));
+
+  const merged = {
+    date: todayStr,
+    completed: {
+      red: Math.max(local.completed?.red || 0, remoteLedger.completed?.red || 0),
+      yellow: Math.max(local.completed?.yellow || 0, remoteLedger.completed?.yellow || 0),
+      green: Math.max(local.completed?.green || 0, remoteLedger.completed?.green || 0),
+      none: Math.max(local.completed?.none || 0, remoteLedger.completed?.none || 0)
+    },
+    completedCardIds: allCardIds,
+    completedBoards: allBoards,
+    deadlineModifiers: {
+      earlyCount: Math.max(local.deadlineModifiers?.earlyCount || 0, remoteLedger.deadlineModifiers?.earlyCount || 0),
+      earlyPts: Math.max(local.deadlineModifiers?.earlyPts || 0, remoteLedger.deadlineModifiers?.earlyPts || 0),
+      ontimeCount: Math.max(local.deadlineModifiers?.ontimeCount || 0, remoteLedger.deadlineModifiers?.ontimeCount || 0),
+      ontimePts: Math.max(local.deadlineModifiers?.ontimePts || 0, remoteLedger.deadlineModifiers?.ontimePts || 0),
+      overdueCount: Math.max(local.deadlineModifiers?.overdueCount || 0, remoteLedger.deadlineModifiers?.overdueCount || 0),
+      overduePts: Math.min(local.deadlineModifiers?.overduePts || 0, remoteLedger.deadlineModifiers?.overduePts || 0)
+    },
+    deferralsExempt: Math.max(local.deferralsExempt || 0, remoteLedger.deferralsExempt || 0),
+    deferralsPenalized: Math.max(local.deferralsPenalized || 0, remoteLedger.deferralsPenalized || 0),
+    deferredCards: Array.from(new Set([...(local.deferredCards || []), ...(remoteLedger.deferredCards || [])])),
+    chaosControlCount: Math.max(local.chaosControlCount || 0, remoteLedger.chaosControlCount || 0)
+  };
+
+  saveDailyScoreLedger(merged, todayStr, false);
+  console.log("[Score Cloud Sync] Successfully adopted remote Trello ledger onto this device:", merged);
+}
+
+function saveDailyScoreLedger(ledger, dateStr = getTodayScoreDateStr(), pushToCloud = true) {
   try {
     localStorage.setItem(SCORE_STORAGE_KEY_PREFIX + dateStr, JSON.stringify(ledger));
+    if (pushToCloud) {
+      pushScoreLedgerToTrello(ledger);
+    }
   } catch (e) {
     console.error("Failed to save score ledger:", e);
   }
@@ -41,7 +99,6 @@ function calculateDeadlineModifier(energy = "green", dueStr = "") {
   const dueDate = new Date(dueStr);
   const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
 
-  // Scaled lookup table by energy level: [Early, On-Target, Overdue/day, Floor]
   const tierConfig = {
     red:    { early: 50, ontime: 25, penaltyPerDay: 25, floor: 25 },
     yellow: { early: 25, ontime: 15, penaltyPerDay: 15, floor: 10 },
@@ -65,7 +122,7 @@ function calculateDeadlineModifier(energy = "green", dueStr = "") {
 function recordCardCompleted(card) {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
-  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return; // Prevent double counting
+  if (ledger.completedCardIds && ledger.completedCardIds.includes(card.id)) return;
 
   if (!ledger.completedCardIds) ledger.completedCardIds = [];
   ledger.completedCardIds.push(card.id);
@@ -82,7 +139,6 @@ function recordCardCompleted(card) {
     ledger.completed.none++;
   }
 
-  // Calculate & record Tier-Scaled Deadline Modifier
   if (!ledger.deadlineModifiers) {
     ledger.deadlineModifiers = { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
   }
@@ -132,13 +188,11 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   const greenPts = (ledger.completed.green || 0) * 25;
   const penaltyPts = (ledger.deferralsPenalized || 0) * 15;
 
-  // Deadline Modifiers
   const dMods = ledger.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
   const deadlineNetPts = (dMods.earlyPts || 0) + (dMods.ontimePts || 0) + (dMods.overduePts || 0);
 
   const rawScore = Math.max(0, redPts + yellowPts + greenPts + deadlineNetPts - penaltyPts);
 
-  // Runway normalization (8:30 AM - 5:00 PM = 8.5h window)
   const isWork = state && state.context === "work";
   const now = new Date();
   const day = now.getDay();
@@ -170,7 +224,6 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
   const yieldRate = netRunway > 0 ? +(rawScore / netRunway).toFixed(1) : 0;
 
-  // Evaluation Ranks: S (Sonic), A, B, C, D
   let rank = "B";
   let title = "STEADY CRUISE";
   let rankColor = "#eab308";
@@ -221,7 +274,6 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   };
 }
 
-// --- 7 CHAOS EMERALDS WEEKLY MILESTONES ---
 function evaluateChaosEmeralds(weekStats) {
   const green = weekStats.totalGreen >= 6;
   const yellow = weekStats.totalYellow >= 4;
@@ -331,7 +383,6 @@ function getWeeklyRollingStats() {
   };
 }
 
-// --- MODALS & UI HANDLERS ---
 function openDebriefModal() {
   const ledger = loadDailyScoreLedger();
   const cal = state.calendarTelemetry || {};
@@ -350,7 +401,6 @@ function openDebriefModal() {
   document.getElementById("dbScoreDisplay").textContent = `${stats.rawScore} PTS`;
   document.getElementById("dbYieldDisplay").textContent = `${stats.yieldRate} PTS / FOCUS HR`;
 
-  // Energy Tier Points
   document.getElementById("dbRedCount").textContent = `${ledger.completed.red || 0}`;
   document.getElementById("dbRedPts").textContent = `+${stats.redPts}`;
   document.getElementById("dbYellowCount").textContent = `${ledger.completed.yellow || 0}`;
@@ -358,7 +408,6 @@ function openDebriefModal() {
   document.getElementById("dbGreenCount").textContent = `${ledger.completed.green || 0}`;
   document.getElementById("dbGreenPts").textContent = `+${stats.greenPts}`;
 
-  // Deadline Modifiers Breakdown
   const dMods = stats.dMods || { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
   const earlyEl = document.getElementById("dbEarlyCount");
   if (earlyEl) earlyEl.textContent = `${dMods.earlyCount || 0}`;
@@ -375,12 +424,10 @@ function openDebriefModal() {
   const overduePtsEl = document.getElementById("dbOverduePts");
   if (overduePtsEl) overduePtsEl.textContent = dMods.overduePts < 0 ? `${dMods.overduePts}` : `0`;
 
-  // Roadblocks & Deferrals
   document.getElementById("dbExemptCount").textContent = `${ledger.deferralsExempt || 0}`;
   document.getElementById("dbPenalizedCount").textContent = `${ledger.deferralsPenalized || 0}`;
   document.getElementById("dbPenaltyPts").textContent = stats.penaltyPts > 0 ? `-${stats.penaltyPts}` : `0`;
 
-  // Normalization details
   document.getElementById("dbRunwayBase").textContent = `${stats.totalRunway.toFixed(2)}h`;
   document.getElementById("dbMeetingsBooked").textContent = `-${stats.meetingHours.toFixed(2)}h`;
   document.getElementById("dbDecompTax").textContent = `-${stats.decompressionTax.toFixed(2)}h`;
@@ -393,9 +440,7 @@ function openDebriefModal() {
     barEl.style.backgroundColor = stats.rankColor;
   }
 
-  // Render Chaos Emerald Tracker Strip in Debrief
   renderEmeraldStrip("dbEmeraldStrip", weekStats);
-
   modal.classList.add("open");
 }
 
@@ -465,7 +510,6 @@ async function confirmDeferral(isDocumented) {
   await moveCard(cardId, boardKey, 'waiting');
 }
 
-// --- PUSH NOTIFICATION TELEMETRY ENGINE ---
 async function requestPushNotificationPermission() {
   if (!("Notification" in window)) {
     alert("Push Notifications are not supported in this browser.");
@@ -499,11 +543,10 @@ function sendPushTelemetryNotification(title, body, tag = "hud-telemetry") {
 function checkAndSchedulePushNotifications() {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = new Date();
-  const day = now.getDay(); // 0 Sun, 5 Fri, 6 Sat
+  const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
   const todayStr = getTodayScoreDateStr();
 
-  // 1. End of Day (EOD) Debrief Push: ~4:45 PM on Mon-Fri
   if (day >= 1 && day <= 5 && hour >= 16.75 && hour < 18.0) {
     const key = "HUD_NOTIFIED_EOD_" + todayStr;
     if (!localStorage.getItem(key)) {
@@ -517,7 +560,6 @@ function checkAndSchedulePushNotifications() {
     }
   }
 
-  // 2. End of Week (EOW) Scorecard Push: Friday ~4:45 PM
   if (day === 5 && hour >= 16.75 && hour < 18.0) {
     const key = "HUD_NOTIFIED_EOW_" + todayStr;
     if (!localStorage.getItem(key)) {
