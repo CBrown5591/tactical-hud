@@ -777,7 +777,49 @@ async function completeCard(cardId, boardKey) {
   await moveCard(cardId, boardKey, 'done');
 }
 
+// --- BACKGROUND AUTO-REFRESH & DEVICE SYNC ENGINE ---
+let _autoSyncTimer = null;
+const AUTO_SYNC_INTERVAL_MS = 60 * 1000; // 60 seconds
+
+function isUserInputActive() {
+  const activeEl = document.activeElement;
+  if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "SELECT")) {
+    return true;
+  }
+  const openModals = document.querySelectorAll(".modal-backdrop.open");
+  return openModals.length > 0;
+}
+
+function scheduleNextAutoSync() {
+  if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
+  _autoSyncTimer = setTimeout(async () => {
+    // Only auto-sync if document is visible and user is not actively typing/modal open
+    if (document.visibilityState === "visible" && !isUserInputActive()) {
+      try {
+        await syncHud();
+      } catch (e) {
+        console.warn("[Auto-Refresh] Background sync skipped:", e);
+      }
+    }
+    scheduleNextAutoSync();
+  }, AUTO_SYNC_INTERVAL_MS);
+}
+
+// Instant re-sync when switching back to the HUD tab or unlocking device
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !isUserInputActive()) {
+    syncHud();
+  }
+});
+
+window.addEventListener("focus", () => {
+  if (!isUserInputActive()) {
+    syncHud();
+  }
+});
+
 window.addEventListener("DOMContentLoaded", () => {
   syncHud();
   updatePomoDisplay();
+  scheduleNextAutoSync();
 });
