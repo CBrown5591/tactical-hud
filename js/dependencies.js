@@ -83,6 +83,11 @@ async function manageCardDependencies(results) {
     }
   }
 
+  const now = new Date();
+  const day = now.getDay();
+  const hour = now.getHours() + (now.getMinutes() / 60);
+  const isMidShift = (day >= 1 && day <= 5 && hour >= 8.0 && hour < 17.0);
+
   for (const { boardKey, listMap, cards } of results) {
     if (!listMap.queue || !listMap.waiting) continue;
 
@@ -102,33 +107,38 @@ async function manageCardDependencies(results) {
       }
     }
 
-    // Phase B: Move unblocked & resolved cards from Waiting -> Queue
-    // TIMING GATE: Postponed during the active business day (8:00 AM - 5:00 PM).
-    // Resolved cards only return to Queue at the end of the shift (>= 5:00 PM) or the start of the next morning (< 8:00 AM).
-    const now = new Date();
-    const day = now.getDay();
-    const hour = now.getHours() + (now.getMinutes() / 60);
-    const isMidShift = (day >= 1 && day <= 5 && hour >= 8.0 && hour < 17.0);
+    // Phase B: Differentiated Unblock & Release Logic
+    const waitingCards = cards.filter(c => c.idList === listMap.waiting);
+    for (const card of waitingCards) {
+      const rels = extractCardRelations(card, allCardsMap);
+      const hasFormalPrereqs = rels.blockedBy && rels.blockedBy.length > 0;
 
-    if (isMidShift) {
-      // During active work hours, keep Waiting pile locked and undisturbed
-      // No automatic mid-day bounce-backs into Queue or Today
-    } else {
-      const waitingCards = cards.filter(c => c.idList === listMap.waiting);
-      for (const card of waitingCards) {
-        const rels = extractCardRelations(card, allCardsMap);
-        // Only return if it had formal dependency links that are now fully complete
-        if (rels.blockedBy && rels.blockedBy.length > 0) {
-          const blockers = getUnresolvedBlockers(card, allCardsMap);
-          if (blockers.length === 0) {
-            try {
-              await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
-              card.idList = listMap.queue;
-              if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
-              console.log(`[Dependency Engine] EOD / Morning Stage: Blockers resolved for "${card.name}". Returned to Queue.`);
-            } catch (e) {
-              console.error("Failed to return unblocked card to Queue:", card.id, e);
-            }
+      if (hasFormalPrereqs) {
+        // CASE 1: Formal task dependency (card attachment link)
+        // When prerequisite card is completed, UNBLOCK IMMEDIATELY even mid-shift!
+        const blockers = getUnresolvedBlockers(card, allCardsMap);
+        if (blockers.length === 0) {
+          try {
+            await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
+            card.idList = listMap.queue;
+            if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
+            console.log(`[Dependency Engine] Prerequisite resolved for "${card.name}". Unblocked immediately to Queue.`);
+          } catch (e) {
+            console.error("Failed to return unblocked card to Queue:", card.id, e);
+          }
+        }
+      } else {
+        // CASE 2: Manual Roadblock Deferral (no formal task links)
+        // Keep locked in Waiting during active business hours (8 AM - 5 PM).
+        // Only return to Queue at EOD (>= 5:00 PM) or the start of the next morning (< 8:00 AM).
+        if (!isMidShift) {
+          try {
+            await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.queue}&pos=bottom`);
+            card.idList = listMap.queue;
+            if (allCardsMap[card.id]) allCardsMap[card.id].idList = listMap.queue;
+            console.log(`[Dependency Engine] EOD / Morning Stage: Returned manual roadblock "${card.name}" to Queue.`);
+          } catch (e) {
+            console.error("Failed to return manual roadblock card to Queue:", card.id, e);
           }
         }
       }
