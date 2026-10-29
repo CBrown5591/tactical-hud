@@ -98,7 +98,7 @@
       <span id="captureTargetLabel" style="font-size:0.68rem; color:var(--muted);">Target: Inbox</span>
     </div>
     <div class="save-input-row">
-      <input type="text" id="quickCaptureInput" class="save-input" placeholder="Dump task or thought and hit Enter..." onkeydown="if(event.key==='Enter') submitQuickCapture()" />
+      <input type="text" id="quickCaptureInput" class="save-input" placeholder="Actionable deliverable with defined finish line (or tap 🔬 Spike)..." onkeydown="if(event.key==='Enter') submitQuickCapture()" />
       <button class="btn btn-primary" onclick="submitQuickCapture()">+ Add</button>
     </div>
     <!-- Board Routing Pills -->
@@ -112,12 +112,13 @@
       <button class="pill" data-board="lab" onclick="selectCaptureBoard('lab', '⚡ Hiiii-Power')">⚡ Hiiii-Power</button>
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
     </div>
-    <!-- Energy Routing Pills -->
+    <!-- Energy Routing Pills & Spike Macro -->
     <div class="pill-row" style="margin-top:6px;">
       <button class="pill active" data-cap-energy="none" onclick="selectCaptureEnergy('none')">⚪ Untriaged</button>
       <button class="pill" data-cap-energy="red" onclick="selectCaptureEnergy('red')">🔴 High Voltage</button>
       <button class="pill" data-cap-energy="yellow" onclick="selectCaptureEnergy('yellow')">🟡 Medium Cruise</button>
       <button class="pill" data-cap-energy="green" onclick="selectCaptureEnergy('green')">🟢 Low Battery</button>
+      <button type="button" class="pill" id="macroSpikeBtn" onclick="toggleQuickCaptureSpikeMacro()" style="border-color:#eab308; color:#fde047; font-weight:700;">🔬 Spike</button>
     </div>
     <!-- Due Date Routing Pills -->
     <div class="pill-row" style="margin-top:6px; align-items:center;">
@@ -429,7 +430,21 @@
       <div class="field"><label>By The VI Board ID (vi)</label><input id="cfgBoardVi" type="text" /></div>
       <div class="field"><label>Project Hiiii-Power Board ID (lab)</label><input id="cfgBoardLab" type="text" /></div>
       <div class="field"><label>Growth Board ID (growth)</label><input id="cfgBoardGrowth" type="text" /></div>
-      <hr style="border-color:#1e293b; margin:12px 0;" />
+            <hr style="border-color:#1e293b; margin:12px 0;" />
+      <div class="field">
+        <label style="font-weight:700; color:#38bdf8; margin-bottom:6px; display:block;">⚡ Auto-Label Keywords (Cloud-Synced across all devices)</label>
+        <span style="font-size:0.68rem; color:var(--muted); display:block; margin-bottom:8px;">Comma-separated words that automatically trigger energy tags on new or untriaged tasks.</span>
+        
+        <label style="color:var(--high); font-size:0.75rem; margin-top:6px;">🔴 High Voltage Keywords (Heavy / Red):</label>
+        <textarea id="cfgKwRed" rows="2" placeholder="architect, deploy, migration, outage, incident..."></textarea>
+
+        <label style="color:var(--med); font-size:0.75rem; margin-top:6px;">🟡 Medium Cruise Keywords (Med / Yellow):</label>
+        <textarea id="cfgKwYellow" rows="2" placeholder="configure, update, review, troubleshoot, script..."></textarea>
+
+        <label style="color:var(--low); font-size:0.75rem; margin-top:6px;">🟢 Low Battery Keywords (Light / Green):</label>
+        <textarea id="cfgKwGreen" rows="2" placeholder="reply, email, ping, check, log, quick, submit..."></textarea>
+      </div>
+<hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
         <label>Google Calendar Apps Script Webhook URL (Optional)</label>
         <input id="cfgCalendarWebhook" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
@@ -447,11 +462,11 @@
   </div>
 
   <!-- Modular Architecture -->
-  <script src="js/auth.js?v=3.0"></script>
-  <script src="js/pomo.js?v=3.0"></script>
-  <script src="js/score.js?v=3.0"></script>
-  <script src="js/trello.js?v=3.0"></script>
-  <script src="js/dependencies.js?v=3.0"></script>
-  <script src="js/app.js?v=3.0"></script>
+  <script src="js/auth.js?v=3.4"></script>
+  <script src="js/pomo.js?v=3.4"></script>
+  <script src="js/score.js?v=3.4"></script>
+  <script src="js/trello.js?v=3.4"></script>
+  <script src="js/dependencies.js?v=3.4"></script>
+  <script src="js/app.js?v=3.4"></script>
 </body>
 </html>
