@@ -17,6 +17,7 @@ let state = {
   captureEnergy: "none",
   captureDue: "",
   captureRecur: "none",
+  captureIsSpike: false,
   saveStateCardId: null,
   scoreLedgerCardId: null,
   activeNoteCard: null,
@@ -145,6 +146,31 @@ function selectCaptureRecur(cadence) {
   document.querySelectorAll("[data-cap-recur]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.capRecur === cadence);
   });
+}
+
+function toggleQuickCaptureSpikeMacro() {
+  state.captureIsSpike = !state.captureIsSpike;
+  const btn = document.getElementById("macroSpikeBtn");
+  const input = document.getElementById("quickCaptureInput");
+
+  if (state.captureIsSpike) {
+    selectCaptureEnergy("yellow");
+    if (btn) btn.classList.add("active");
+    if (input) {
+      const cur = input.value.trim();
+      if (!cur) {
+        input.value = "🔬 Spike: ";
+      } else if (!cur.startsWith("🔬 Spike:")) {
+        input.value = "🔬 Spike: " + cur;
+      }
+      input.focus();
+    }
+  } else {
+    if (btn) btn.classList.remove("active");
+    if (input && input.value.startsWith("🔬 Spike: ")) {
+      input.value = input.value.replace(/^🔬 Spike:\s*/, "");
+    }
+  }
 }
 
 function selectCaptureDue(preset) {
@@ -402,7 +428,20 @@ async function syncHud() {
           }
           return;
         }
-        const energyColor = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+        let energyColor = "none";
+        const matchedEnergyLabel = (card.labels || []).find(l => ["red", "yellow", "green"].includes(l.color));
+        if (matchedEnergyLabel) {
+          energyColor = matchedEnergyLabel.color;
+        } else if (typeof inferEnergyFromTitle === "function") {
+          const autoInferred = inferEnergyFromTitle(card.name);
+          if (autoInferred !== "none") {
+            energyColor = autoInferred;
+            // Asynchronously tag the card on Trello in the background
+            if (cache && cache.labelMap && cache.labelMap[autoInferred]) {
+              setCardEnergy(card.id, boardKey, autoInferred).catch(e => console.warn("Auto-label failed:", e));
+            }
+          }
+        }
         const commentsList = (card.actions && Array.isArray(card.actions))
           ? card.actions.filter(a => a.type === "commentCard" && a.data && a.data.text).map(a => ({
               id: a.id,
@@ -651,9 +690,15 @@ async function submitQuickCapture() {
   const cache = state.boardCache[targetBoardKey];
   if (!cache || !cache.listMap.inbox) return alert("Target Inbox list not loaded.");
 
+  const isSpikeTask = state.captureIsSpike || name.startsWith("🔬 Spike:") || name.toLowerCase().startsWith("spike:");
+
   let labelIds = [];
-  if (state.captureEnergy !== "none" && cache.labelMap[state.captureEnergy]) {
-    labelIds.push(cache.labelMap[state.captureEnergy]);
+  let resolvedEnergy = isSpikeTask ? "yellow" : state.captureEnergy;
+  if (resolvedEnergy === "none" && typeof inferEnergyFromTitle === "function") {
+    resolvedEnergy = inferEnergyFromTitle(name);
+  }
+  if (resolvedEnergy !== "none" && cache.labelMap[resolvedEnergy]) {
+    labelIds.push(cache.labelMap[resolvedEnergy]);
   }
   if (state.captureRecur !== "none" && cache.recurLabelMap && cache.recurLabelMap[state.captureRecur]) {
     labelIds.push(cache.recurLabelMap[state.captureRecur]);
@@ -662,16 +707,25 @@ async function submitQuickCapture() {
   let labelParam = labelIds.length > 0 ? `&idLabels=${labelIds.join(",")}` : "";
   let dueParam = state.captureDue ? `&due=${encodeURIComponent(state.captureDue)}` : "";
 
+  let descParam = "";
+  if (isSpikeTask) {
+    const spikeTemplate = `**Objective:** Answer technical unknown / determine physical path forward.\n**Deliverable:** Document recommendation & next actions in comments.\n**Time-Box:** Max 2 Pomodoros (50 min).`;
+    descParam = `&desc=${encodeURIComponent(spikeTemplate)}`;
+  }
+
   const blockerSelect = document.getElementById("quickCaptureBlockerSelect");
   const blockerId = blockerSelect ? blockerSelect.value : "";
 
   input.value = "";
   selectCaptureDue("none");
   selectCaptureRecur("none");
+  state.captureIsSpike = false;
+  const spikeBtn = document.getElementById("macroSpikeBtn");
+  if (spikeBtn) spikeBtn.classList.remove("active");
   if (blockerSelect) blockerSelect.value = "";
 
   try {
-    const newCard = await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}`);
+    const newCard = await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}${descParam}`);
 
     if (blockerId && newCard && newCard.id) {
       const targetCard = state.allLoadedCards.find(c => c.id === blockerId);
