@@ -95,6 +95,16 @@ function openSettings() {
   document.getElementById("cfgBoardGrowth").value = (cfg.boards && cfg.boards.growth) || "";
   const calInput = document.getElementById("cfgCalendarWebhook");
   if (calInput) calInput.value = cfg.calendarWebhook || "";
+
+  // Populate cloud-synced keywords
+  const kw = (typeof getActiveEnergyKeywords === "function") ? getActiveEnergyKeywords() : { red: "", yellow: "", green: "" };
+  const redEl = document.getElementById("cfgKwRed");
+  const yelEl = document.getElementById("cfgKwYellow");
+  const grnEl = document.getElementById("cfgKwGreen");
+  if (redEl) redEl.value = kw.red || "";
+  if (yelEl) yelEl.value = kw.yellow || "";
+  if (grnEl) grnEl.value = kw.green || "";
+
   document.getElementById("settingsModal").classList.add("open");
 }
 
@@ -137,6 +147,19 @@ async function saveSettings() {
     calendarWebhook: document.getElementById("cfgCalendarWebhook") ? document.getElementById("cfgCalendarWebhook").value.trim() : ""
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(cfg));
+
+  // Persist updated keywords across all devices via the Trello Score Ledger card
+  const redEl = document.getElementById("cfgKwRed");
+  const yelEl = document.getElementById("cfgKwYellow");
+  const grnEl = document.getElementById("cfgKwGreen");
+  if (redEl && yelEl && grnEl && typeof updateCloudEnergyKeywords === "function") {
+    await updateCloudEnergyKeywords({
+      red: redEl.value.trim(),
+      yellow: yelEl.value.trim(),
+      green: grnEl.value.trim()
+    });
+  }
+
   closeSettings();
   syncHud();
 }

@@ -359,6 +359,8 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   // Decompression buffer inventory allowance (+0.5h breathing room)
   const decompBufferApplied = (activeCloudLedger.inventory && activeCloudLedger.inventory.decompBuffers > 0) ? 0.5 : 0;
 
+  const isMission = state && state.context === "mission";
+
   if (isWork) {
     if (isOff) {
       totalRunway = 0;
@@ -370,6 +372,11 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
       decompressionTax = +(Math.max(0, (meetingHours * 0.25) - decompBufferApplied)).toFixed(2);
       netRunway = Math.max(0.5, +(totalRunway - (meetingHours + decompressionTax)).toFixed(2));
     }
+  } else if (isMission) {
+    totalRunway = 2.5; // Focused high-velocity evening / sprint runway
+    meetingHours = 0;
+    decompressionTax = 0;
+    netRunway = 2.5;
   } else {
     totalRunway = 4.0;
     meetingHours = (calTelemetry && calTelemetry.bookedHours) ? Math.min(3.0, calTelemetry.bookedHours) : 0;

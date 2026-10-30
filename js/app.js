@@ -31,16 +31,37 @@ let state = {
 
 function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
+  const isMission = state.context === "mission";
   const now = new Date();
   const day = now.getDay();
-  const isWeekend = (day === 0 || day === 6); // 0 = Sunday, 6 = Saturday
+  const isWeekend = (day === 0 || day === 6);
   const isOff = (calData && calData.isWorkOffDay) || isWeekend;
 
-  const bookedHours = isWork
-    ? (calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0)
-    : (calData ? (calData.bookedHours ?? 0) : 0);
+  // MISSION CONTROL: Focused Sprint format (Max 2 tasks: 1 Heavy/Med + 1 Light)
+  if (isMission) {
+    return {
+      red: 1,
+      yellow: 1,
+      green: 1,
+      total: 2,
+      label: "SPRINT LOAD (1 HEAVY/MED / 1 LIGHT)"
+    };
+  }
 
-  // Option A: If viewing Work HUD on a weekend or off-day (vacation, PTO, RDO), lock capacity to 0
+  // PERSONAL HUD: Maintenance rhythm (Max 3 tasks: 0 Heavy / 1 Med / 2 Light)
+  if (state.context === "personal") {
+    return {
+      red: 0,
+      yellow: 1,
+      green: 2,
+      total: 3,
+      label: "MAINTENANCE (0 HEAVY / 1 MED / 2 LIGHT)"
+    };
+  }
+
+  // WORK HUD: Meeting-damped 9-to-5 window
+  const bookedHours = calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0;
+
   if (isWork && isOff) {
     let offLabel = "🌴 SCHEDULED OFF DAY (WORK LOCKED)";
     if (isWeekend) {
@@ -59,11 +80,11 @@ function calculateEnergyQuotas(calData = null) {
   let maxGreen = 2;
 
   if (bookedHours > 6.0) {
-    maxRed = 0; maxYellow = 0; maxGreen = 2; // Locked / high meeting load
+    maxRed = 0; maxYellow = 0; maxGreen = 2;
   } else if (bookedHours > 4.0) {
-    maxRed = 0; maxYellow = 1; maxGreen = 2; // Heavy meeting day (3 tasks max)
+    maxRed = 0; maxYellow = 1; maxGreen = 2;
   } else if (bookedHours > 2.0) {
-    maxRed = 0; maxYellow = 2; maxGreen = 2; // Moderate meeting load (convert Heavy to Medium)
+    maxRed = 0; maxYellow = 2; maxGreen = 2;
   }
 
   const total = maxRed + maxYellow + maxGreen;
@@ -73,41 +94,76 @@ function calculateEnergyQuotas(calData = null) {
 
 function determineAutoContext(cfg, calTelemetry = null) {
   const params = new URLSearchParams(window.location.search);
-  if (params.get("context") === "work" || params.get("context") === "personal") {
+  const pCtx = params.get("context");
+  if (pCtx === "work" || pCtx === "personal" || pCtx === "mission") {
     state.manualOverride = true;
-    return params.get("context");
-  }
-
-  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO), automatically route to Personal HUD
-  if (calTelemetry && calTelemetry.isWorkOffDay) {
-    return "personal";
+    return pCtx;
   }
 
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
-  return (day >= 1 && day <= 5 && hour >= 8.0 && hour < 17.0) ? "work" : "personal";
+
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO):
+  // Morning routes to Mission Control for venture builds; evening to Personal
+  if (calTelemetry && calTelemetry.isWorkOffDay) {
+    return hour < 13.0 ? "mission" : "personal";
+  }
+
+  // Monday - Friday schedule:
+  if (day >= 1 && day <= 5) {
+    if (hour >= 8.0 && hour < 17.0) return "work";
+    if (hour >= 17.0 && hour < 19.0) return "personal";
+    if (hour >= 19.0 && hour < 22.5 && day <= 4) return "mission"; // Mon - Thu evening sprint
+    return "personal";
+  }
+
+  // Weekends: Default to Personal
+  return "personal";
 }
 
 function applyTheme() {
-  const isWork = state.context === "work";
-  document.documentElement.style.setProperty("--accent", isWork ? "#38bdf8" : "#a855f7");
+  const ctx = state.context;
+  const isWork = (ctx === "work");
+  const isMission = (ctx === "mission");
+  const isPersonal = (ctx === "personal");
+
+  // Accent color mapping: Work (Sky Blue), Personal (Purple), Mission Control (High-Contrast Titanium)
+  let accent = "#38bdf8";
+  let title = "💼 WORK HUD";
+  if (isMission) {
+    accent = "#f8fafc";
+    title = "🚀 MISSION CONTROL";
+  } else if (isPersonal) {
+    accent = "#a855f7";
+    title = "🏠 PERSONAL HUD";
+  }
+  document.documentElement.style.setProperty("--accent", accent);
+
   const modeTitleEl = document.getElementById("modeTitle");
-  if (modeTitleEl) modeTitleEl.textContent = isWork ? "💼 WORK HUD" : "🏠 PERSONAL MULTI-HUD";
-  
+  if (modeTitleEl) modeTitleEl.textContent = title;
+
+  // Toggle quick capture board pill rows
   const workPills = document.getElementById("workBoardPills");
   const personalPills = document.getElementById("personalBoardPills");
+  const missionPills = document.getElementById("missionBoardPills");
+
   if (workPills) workPills.style.display = isWork ? "flex" : "none";
-  if (personalPills) personalPills.style.display = isWork ? "none" : "flex";
-  
-  if (isWork && (state.captureBoard !== "work" && state.captureBoard !== "growth")) {
-    state.captureBoard = "work";
-  } else if (!isWork && (state.captureBoard === "work" || !BOARD_LABELS[state.captureBoard])) {
+  if (personalPills) personalPills.style.display = isPersonal ? "flex" : "none";
+  if (missionPills) missionPills.style.display = isMission ? "flex" : "none";
+
+  // Auto-set valid capture board when context switches
+  if (isWork) {
+    if (state.captureBoard !== "work" && state.captureBoard !== "growth") state.captureBoard = "work";
+  } else if (isMission) {
+    if (!["vi", "lab", "growth"].includes(state.captureBoard)) state.captureBoard = "vi";
+  } else {
     state.captureBoard = "life";
   }
 
-  const currentPillContainer = isWork ? "#workBoardPills" : "#personalBoardPills";
-  document.querySelectorAll(`${currentPillContainer} .pill`).forEach(btn => {
+  // Update pill active classes
+  const currentContainer = isWork ? "#workBoardPills" : (isMission ? "#missionBoardPills" : "#personalBoardPills");
+  document.querySelectorAll(`${currentContainer} .pill`).forEach(btn => {
     btn.classList.toggle("active", btn.dataset.board === state.captureBoard);
   });
 
@@ -119,7 +175,10 @@ function applyTheme() {
 
 function toggleManualContext() {
   state.manualOverride = true;
-  state.context = state.context === "work" ? "personal" : "work";
+  // 3-way cyclic rotation: Work -> Mission Control -> Personal -> Work
+  if (state.context === "work") state.context = "mission";
+  else if (state.context === "mission") state.context = "personal";
+  else state.context = "work";
   applyTheme();
   syncHud();
 }
@@ -224,8 +283,10 @@ async function autoPromoteCards(results) {
     }
   }
 
-  const isWork = state.context === "work";
-  const boardPriority = isWork ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
+  const ctx = state.context;
+  let boardPriority = ["work", "growth"];
+  if (ctx === "mission") boardPriority = ["vi", "lab", "growth"];
+  else if (ctx === "personal") boardPriority = ["life"];
   const getBoardPriorityIdx = (bKey) => {
     const idx = boardPriority.indexOf(bKey);
     return idx === -1 ? 99 : idx;
@@ -367,7 +428,9 @@ async function syncHud() {
   // Re-calculate energy quotas for the resolved context
   state.energyQuotas = calculateEnergyQuotas(calData);
 
-  const activeKeys = state.context === "work" ? ["work", "growth"] : ["life", "vi", "lab", "growth"];
+  let activeKeys = ["work", "growth"];
+  if (state.context === "mission") activeKeys = ["vi", "lab", "growth"];
+  else if (state.context === "personal") activeKeys = ["life"];
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {
