@@ -181,6 +181,16 @@
     <div class="modal">
       <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">💬 Card Details</h2>
       
+            <!-- In-Modal Energy Level Selector -->
+      <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-bottom:12px;">
+        <div class="section-label" style="margin-bottom:6px;"><span>⚡ ENERGY LEVEL</span></div>
+        <div class="pill-row" id="modalEnergyPills" style="margin-top:0;">
+          <button type="button" class="pill" id="modalEnergyRed" onclick="setModalCardEnergy('red')">🔴 High Voltage</button>
+          <button type="button" class="pill" id="modalEnergyYellow" onclick="setModalCardEnergy('yellow')">🟡 Medium Cruise</button>
+          <button type="button" class="pill" id="modalEnergyGreen" onclick="setModalCardEnergy('green')">🟢 Low Battery</button>
+        </div>
+      </div>
+
       <!-- Native Dependency Authoring Controls inside Modal -->
       <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-bottom:12px;">
         <div class="section-label" style="margin-bottom:6px;"><span>🔒 DEPENDENCIES & BLOCKERS</span></div>
@@ -462,11 +472,11 @@
   </div>
 
   <!-- Modular Architecture -->
-  <script src="js/auth.js?v=3.4"></script>
-  <script src="js/pomo.js?v=3.4"></script>
-  <script src="js/score.js?v=3.4"></script>
-  <script src="js/trello.js?v=3.4"></script>
-  <script src="js/dependencies.js?v=3.4"></script>
-  <script src="js/app.js?v=3.4"></script>
+  <script src="js/auth.js?v=3.5"></script>
+  <script src="js/pomo.js?v=3.5"></script>
+  <script src="js/score.js?v=3.5"></script>
+  <script src="js/trello.js?v=3.5"></script>
+  <script src="js/dependencies.js?v=3.5"></script>
+  <script src="js/app.js?v=3.5"></script>
 </body>
 </html>
