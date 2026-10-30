@@ -101,19 +101,8 @@
       <input type="text" id="quickCaptureInput" class="save-input" placeholder="Actionable deliverable with defined finish line (or tap 🔬 Spike)..." onkeydown="if(event.key==='Enter') submitQuickCapture()" />
       <button class="btn btn-primary" onclick="submitQuickCapture()">+ Add</button>
     </div>
-    <!-- Board Routing Pills (Dynamically Populated by applyTheme & Cloud Registry) -->
-    <div class="pill-row" id="quickCaptureBoardPills">
-      <button class="pill active" data-board="work" onclick="selectCaptureBoard('work', '💼 Work')">💼 Work</button>
-      <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
-    </div>
-    <div class="pill-row" id="personalBoardPills" style="display:none;">
-      <button class="pill active" data-board="life" onclick="selectCaptureBoard('life', '🎢 King's Dominion')">🎢 King's Dom</button>
-    </div>
-    <div class="pill-row" id="missionBoardPills" style="display:none;">
-      <button class="pill active" data-board="vi" onclick="selectCaptureBoard('vi', '🏝️ By The VI')">🏝️ By The VI</button>
-      <button class="pill" data-board="lab" onclick="selectCaptureBoard('lab', '⚡ Hiiii-Power')">⚡ Hiiii-Power</button>
-      <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
-    </div>
+    <!-- Board Routing Pills (Dynamically Populated by Context & Cloud Registry) -->
+    <div class="pill-row" id="quickCaptureBoardPills"></div>
     <!-- Energy Routing Pills & Spike Macro -->
     <div class="pill-row" style="margin-top:6px;">
       <button class="pill active" data-cap-energy="none" onclick="selectCaptureEnergy('none')">⚪ Untriaged</button>
@@ -456,6 +445,44 @@
         <label style="color:var(--low); font-size:0.75rem; margin-top:6px;">🟢 Low Battery Keywords (Light / Green):</label>
         <textarea id="cfgKwGreen" rows="2" placeholder="reply, email, ping, check, log, quick, submit..."></textarea>
       </div>
+      <hr style="border-color:#1e293b; margin:12px 0;" />
+      <div class="field">
+        <label style="font-weight:700; color:#f8fafc; margin-bottom:6px; display:block;">🗂️ Dynamic Board Sources (Cloud-Synced across all devices)</label>
+        <span style="font-size:0.68rem; color:var(--muted); display:block; margin-bottom:8px;">Add project or venture boards to any HUD without touching code. Stored directly on your Trello cloud ledger.</span>
+        
+        <!-- Active Dynamic Boards List -->
+        <div id="customBoardsList" style="display:flex; flex-direction:column; gap:6px; margin-bottom:10px;"></div>
+        
+        <!-- Add Board Form -->
+        <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px;">
+          <div style="font-size:0.75rem; font-weight:700; color:#38bdf8; margin-bottom:6px;">+ Add New Board Source</div>
+          <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px; margin-bottom:6px;">
+            <div>
+              <label style="font-size:0.68rem; color:var(--muted);">Board Name:</label>
+              <input type="text" id="newBoardName" placeholder="e.g. VI Ride Transit" style="font-size:0.75rem; padding:6px 8px;" />
+            </div>
+            <div>
+              <label style="font-size:0.68rem; color:var(--muted);">Trello Board ID or URL:</label>
+              <input type="text" id="newBoardId" placeholder="e.g. 67a2b... or trello.com/b/..." style="font-size:0.75rem; padding:6px 8px;" />
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns: 1fr 80px auto; gap:6px; align-items:flex-end;">
+            <div>
+              <label style="font-size:0.68rem; color:var(--muted);">Target HUD Context:</label>
+              <select id="newBoardContext" style="font-size:0.75rem; padding:6px 8px;">
+                <option value="mission" selected>🚀 Mission Control</option>
+                <option value="work">💼 Work HUD</option>
+                <option value="personal">🏠 Personal HUD</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.68rem; color:var(--muted);">Icon:</label>
+              <input type="text" id="newBoardIcon" placeholder="🚌" maxlength="4" style="text-align:center; font-size:0.85rem; padding:6px;" value="🚀" />
+            </div>
+            <button type="button" class="btn btn-primary" onclick="addCustomBoardAction()" style="padding:7px 12px; font-size:0.75rem; white-space:nowrap;">+ Add Board</button>
+          </div>
+        </div>
+      </div>
 <hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
         <label>Google Calendar Apps Script Webhook URL (Optional)</label>
@@ -474,11 +501,11 @@
   </div>
 
   <!-- Modular Architecture -->
-  <script src="js/auth.js?v=3.7"></script>
-  <script src="js/pomo.js?v=3.7"></script>
-  <script src="js/score.js?v=3.7"></script>
-  <script src="js/trello.js?v=3.7"></script>
-  <script src="js/dependencies.js?v=3.7"></script>
-  <script src="js/app.js?v=3.7"></script>
+  <script src="js/auth.js?v=3.8"></script>
+  <script src="js/pomo.js?v=3.8"></script>
+  <script src="js/score.js?v=3.8"></script>
+  <script src="js/trello.js?v=3.8"></script>
+  <script src="js/dependencies.js?v=3.8"></script>
+  <script src="js/app.js?v=3.8"></script>
 </body>
 </html>
