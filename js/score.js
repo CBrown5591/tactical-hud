@@ -1,4 +1,4 @@
-// --- js/score.js: Pure Cloud Ledger & Score Engine (Zero Local Storage) ---
+// --- js/score.js: Pure Cloud Ledger, Ring Economy & Super Sonic Engine (Zero Local Storage) ---
 
 function getTodayScoreDateStr() {
   const now = new Date();
@@ -6,7 +6,7 @@ function getTodayScoreDateStr() {
 }
 
 // In-memory runtime state for the score ledger.
-// Initialized with empty defaults, hydrated strictly from Trello's "📊 SCORE LEDGER" card.
+// Hydrated strictly from Trello's "📊 SCORE LEDGER" card.
 let activeCloudLedger = {
   currentDate: getTodayScoreDateStr(),
   today: {
@@ -18,7 +18,26 @@ let activeCloudLedger = {
     deferralsExempt: 0,
     deferralsPenalized: 0,
     deferredCards: [],
-    chaosControlCount: 0
+    chaosControlCount: 0,
+    dailyFreeWarpUsed: false
+  },
+  ringBank: 0,
+  inventory: {
+    warpTokens: 0,
+    roadblockShields: 0,
+    deadlineExtenders: 0,
+    decompBuffers: 0,
+    spikePasses: 0
+  },
+  superState: {
+    active: false,
+    startedAt: null,
+    lastDrainAt: null
+  },
+  energyKeywords: {
+    red: "architect, architecture, migration, migrate, deploy, deployment, outage, incident, sev-1, disaster, scada, infra, provision, rebuild, failover, security review",
+    yellow: "configure, configuration, update, review, troubleshoot, investigate, test, testing, script, documentation, doc, prep, refactor, sync, analyze, analysis",
+    green: "reply, email, ping, check, log, approve, approval, quick, clean, archive, submit, order, call, receipt, schedule, invoice"
   },
   history: {}
 };
@@ -55,7 +74,8 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
     deferralsExempt: 0,
     deferralsPenalized: 0,
     deferredCards: [],
-    chaosControlCount: 0
+    chaosControlCount: 0,
+    dailyFreeWarpUsed: false
   };
 }
 
@@ -86,10 +106,19 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
     const parsed = JSON.parse(cardDesc.trim());
     const todayStr = getTodayScoreDateStr();
 
-    // Check if it's the structured { currentDate, today, history } format or flat ledger
     if (parsed.today && parsed.currentDate) {
       activeCloudLedger = parsed;
-      // If it's a new day, rollover today
+      if (!activeCloudLedger.inventory) {
+        activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
+      }
+      if (activeCloudLedger.ringBank === undefined) {
+        activeCloudLedger.ringBank = 0;
+      }
+      if (!activeCloudLedger.superState) {
+        activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
+      }
+
+      // If it's a new day, rollover today and reset daily free warp
       if (activeCloudLedger.currentDate !== todayStr) {
         if (!activeCloudLedger.history) activeCloudLedger.history = {};
         activeCloudLedger.history[activeCloudLedger.currentDate] = activeCloudLedger.today;
@@ -103,25 +132,100 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
           deferralsExempt: 0,
           deferralsPenalized: 0,
           deferredCards: [],
-          chaosControlCount: 0
+          chaosControlCount: 0,
+          dailyFreeWarpUsed: false
         };
       }
     } else if (parsed.date) {
-      // Legacy flat ledger
+      // Legacy flat ledger fallback
       activeCloudLedger.currentDate = parsed.date;
       activeCloudLedger.today = parsed;
       if (!activeCloudLedger.history) activeCloudLedger.history = {};
       activeCloudLedger.history[parsed.date] = parsed;
+      if (!activeCloudLedger.inventory) {
+        activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
+      }
+      if (activeCloudLedger.ringBank === undefined) activeCloudLedger.ringBank = 0;
+      if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
     }
     console.log("[Portal Master] Hydrated score ledger directly from Trello:", activeCloudLedger);
+    updateRingDisplay();
   } catch (e) {
     console.warn("[Portal Master] Failed to parse Trello score ledger card description:", e);
   }
 }
 
+// --- CLOUD-SYNCED ENERGY KEYWORD INFERENCE ENGINE ---
+const DEFAULT_ENERGY_KEYWORDS = {
+  red: "architect, architecture, migration, migrate, deploy, deployment, outage, incident, sev-1, disaster, scada, infra, provision, rebuild, failover, security review",
+  yellow: "configure, configuration, update, review, troubleshoot, investigate, test, testing, script, documentation, doc, prep, refactor, sync, analyze, analysis",
+  green: "reply, email, ping, check, log, approve, approval, quick, clean, archive, submit, order, call, receipt, schedule, invoice"
+};
+
+function getActiveEnergyKeywords() {
+  if (activeCloudLedger && activeCloudLedger.energyKeywords) {
+    return {
+      red: activeCloudLedger.energyKeywords.red !== undefined ? activeCloudLedger.energyKeywords.red : DEFAULT_ENERGY_KEYWORDS.red,
+      yellow: activeCloudLedger.energyKeywords.yellow !== undefined ? activeCloudLedger.energyKeywords.yellow : DEFAULT_ENERGY_KEYWORDS.yellow,
+      green: activeCloudLedger.energyKeywords.green !== undefined ? activeCloudLedger.energyKeywords.green : DEFAULT_ENERGY_KEYWORDS.green
+    };
+  }
+  return DEFAULT_ENERGY_KEYWORDS;
+}
+
+async function updateCloudEnergyKeywords(newKeywords) {
+  if (!activeCloudLedger) activeCloudLedger = { currentDate: getTodayScoreDateStr(), today: loadDailyScoreLedger() };
+  activeCloudLedger.energyKeywords = {
+    red: newKeywords.red || "",
+    yellow: newKeywords.yellow || "",
+    green: newKeywords.green || ""
+  };
+  await commitScoreLedgerToTrello(activeCloudLedger.today);
+  console.log("[Portal Master] Committed updated cloud energy keywords to Trello card:", activeCloudLedger.energyKeywords);
+}
+
+function buildKeywordRegex(csvString) {
+  if (!csvString || !csvString.trim()) return null;
+  const terms = csvString.split(",")
+    .map(t => t.trim().toLowerCase())
+    .filter(t => t.length > 0)
+    .map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  if (terms.length === 0) return null;
+  return new RegExp(`\\b(${terms.join("|")})\\b`, "i");
+}
+
+function inferEnergyFromTitle(title = "") {
+  if (!title) return "none";
+  const clean = title.trim();
+
+  // 1. Shorthand Override Check (!red, [H], !yel, etc.)
+  if (/^(!red|!high|\[h\])\s+/i.test(clean)) return "red";
+  if (/^(!yel|!med|\[m\])\s+/i.test(clean)) return "yellow";
+  if (/^(!grn|!low|\[l\])\s+/i.test(clean)) return "green";
+
+  const kw = getActiveEnergyKeywords();
+  const redRegex = buildKeywordRegex(kw.red);
+  const yellowRegex = buildKeywordRegex(kw.yellow);
+  const greenRegex = buildKeywordRegex(kw.green);
+
+  // Highest Voltage Priority
+  if (redRegex && redRegex.test(clean)) return "red";
+  if (yellowRegex && yellowRegex.test(clean)) return "yellow";
+  if (greenRegex && greenRegex.test(clean)) return "green";
+
+  return "none";
+}
+
 // Tier-Scaled Deadline Modifier Calculation
 function calculateDeadlineModifier(energy = "green", dueStr = "") {
   if (!dueStr) return { type: "none", pts: 0, label: "No Deadline" };
+
+  // SUPER SONIC PERK: Automatic max On-Target bonus regardless of timestamp
+  if (isSuperSonicActive()) {
+    const tierOnTarget = { red: 25, yellow: 15, green: 10, none: 5 };
+    const pts = tierOnTarget[energy] || 10;
+    return { type: "ontime", pts, label: `⚡ Super On-Target (+${pts})` };
+  }
 
   const now = new Date();
   const dueDate = new Date(dueStr);
@@ -161,11 +265,16 @@ async function recordCardCompleted(card) {
   }
 
   const energy = card.energy || "none";
+  let earnedBasePts = 0;
   if (ledger.completed[energy] !== undefined) {
     ledger.completed[energy]++;
   } else {
     ledger.completed.none++;
   }
+
+  if (energy === "red") earnedBasePts = 100;
+  else if (energy === "yellow") earnedBasePts = 50;
+  else if (energy === "green") earnedBasePts = 25;
 
   if (!ledger.deadlineModifiers) {
     ledger.deadlineModifiers = { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
@@ -182,22 +291,37 @@ async function recordCardCompleted(card) {
     ledger.deadlineModifiers.overduePts += mod.pts;
   }
 
+  // RING REWARD: 1 Point Earned = 1 Ring Banked!
+  const netCardPoints = Math.max(0, earnedBasePts + (mod.pts || 0));
+  activeCloudLedger.ringBank = (activeCloudLedger.ringBank || 0) + netCardPoints;
+
   await commitScoreLedgerToTrello(ledger);
+  updateRingDisplay();
 }
 
 async function recordCardDeferred(card, isExempt = false, reason = "") {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
-  if (isExempt) {
+
+  // SUPER SONIC PERK or ROADBLOCK SHIELD: 100% Tax Waiver
+  const isSuper = isSuperSonicActive();
+  const hasShield = (activeCloudLedger.inventory && activeCloudLedger.inventory.roadblockShields > 0);
+
+  if (isSuper || isExempt) {
     ledger.deferralsExempt = (ledger.deferralsExempt || 0) + 1;
+  } else if (hasShield) {
+    activeCloudLedger.inventory.roadblockShields--;
+    ledger.deferralsExempt = (ledger.deferralsExempt || 0) + 1;
+    reason = reason ? `${reason} (🛡️ Roadblock Shield Used)` : "🛡️ Roadblock Shield Used";
   } else {
     ledger.deferralsPenalized = (ledger.deferralsPenalized || 0) + 1;
   }
+
   if (!ledger.deferredCards) ledger.deferredCards = [];
   ledger.deferredCards.push({
     id: card.id,
     name: card.name,
-    isExempt,
+    isExempt: isSuper || isExempt || hasShield,
     reason,
     time: new Date().toISOString()
   });
@@ -221,7 +345,6 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
   const rawScore = Math.max(0, redPts + yellowPts + greenPts + deadlineNetPts - penaltyPts);
 
-  // Runway normalization (8:00 AM - 5:00 PM = 9.0h window)
   const isWork = state && state.context === "work";
   const now = new Date();
   const day = now.getDay();
@@ -233,6 +356,9 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   let decompressionTax = 0;
   let netRunway = 9.0;
 
+  // Decompression buffer inventory allowance (+0.5h breathing room)
+  const decompBufferApplied = (activeCloudLedger.inventory && activeCloudLedger.inventory.decompBuffers > 0) ? 0.5 : 0;
+
   if (isWork) {
     if (isOff) {
       totalRunway = 0;
@@ -241,14 +367,14 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
       meetingHours = (calTelemetry && calTelemetry.workBookedHours !== undefined)
         ? calTelemetry.workBookedHours
         : (calTelemetry && calTelemetry.bookedHours ? calTelemetry.bookedHours : 0);
-      decompressionTax = +(meetingHours * 0.25).toFixed(2);
-      netRunway = Math.max(0.5, +(totalRunway - (meetingHours * 1.25)).toFixed(2));
+      decompressionTax = +(Math.max(0, (meetingHours * 0.25) - decompBufferApplied)).toFixed(2);
+      netRunway = Math.max(0.5, +(totalRunway - (meetingHours + decompressionTax)).toFixed(2));
     }
   } else {
     totalRunway = 4.0;
     meetingHours = (calTelemetry && calTelemetry.bookedHours) ? Math.min(3.0, calTelemetry.bookedHours) : 0;
-    decompressionTax = +(meetingHours * 0.25).toFixed(2);
-    netRunway = Math.max(0.5, +(totalRunway - (meetingHours * 1.25)).toFixed(2));
+    decompressionTax = +(Math.max(0, (meetingHours * 0.25) - decompBufferApplied)).toFixed(2);
+    netRunway = Math.max(0.5, +(totalRunway - (meetingHours + decompressionTax)).toFixed(2));
   }
 
   const yieldRate = netRunway > 0 ? +(rawScore / netRunway).toFixed(1) : 0;
@@ -351,7 +477,6 @@ function getWeeklyRollingStats() {
     cur.setDate(monday.getDate() + i);
     const dateStr = cur.toISOString().split("T")[0];
     
-    // Look up day ledger from cloud history
     const l = (activeCloudLedger.history && activeCloudLedger.history[dateStr]) || 
               (activeCloudLedger.currentDate === dateStr ? activeCloudLedger.today : null);
 
@@ -413,6 +538,134 @@ function getWeeklyRollingStats() {
   };
 }
 
+// --- SUPER SONIC & RING VAULT ENGINE ---
+function isSuperSonicActive() {
+  return !!(activeCloudLedger && activeCloudLedger.superState && activeCloudLedger.superState.active);
+}
+
+function canTransformSuperSonic() {
+  const weekStats = typeof getWeeklyRollingStats === "function" ? getWeeklyRollingStats() : { isSuperState: false };
+  const rings = (activeCloudLedger && activeCloudLedger.ringBank) || 0;
+  return weekStats.isSuperState && rings >= 50;
+}
+
+function updateRingDisplay() {
+  const ringCountEl = document.getElementById("ringCountDisplay");
+  const vaultRingEl = document.getElementById("vaultRingDisplay");
+  const superBtn = document.getElementById("superTransformBtn");
+  const superPrompt = document.getElementById("vaultSuperPrompt");
+  const isSuper = isSuperSonicActive();
+  const rings = (activeCloudLedger && activeCloudLedger.ringBank) || 0;
+
+  if (ringCountEl) ringCountEl.textContent = isSuper ? `⚡ SUPER: ${rings}` : `🪙 ${rings} RINGS`;
+  if (vaultRingEl) vaultRingEl.textContent = `${rings} RINGS`;
+
+  const eligibleForSuper = canTransformSuperSonic();
+  if (superBtn) {
+    if (isSuper) {
+      superBtn.classList.remove("hidden");
+      superBtn.textContent = "⚡ DEPOWER";
+    } else if (eligibleForSuper) {
+      superBtn.classList.remove("hidden");
+      superBtn.textContent = "⭐ GO SUPER";
+    } else {
+      superBtn.classList.add("hidden");
+    }
+  }
+
+  if (superPrompt) superPrompt.style.display = (isSuper || eligibleForSuper) ? "block" : "none";
+  document.body.classList.toggle("super-sonic-active", isSuper);
+}
+
+function toggleSuperSonic() {
+  if (!activeCloudLedger.superState) {
+    activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
+  }
+  if (isSuperSonicActive()) {
+    activeCloudLedger.superState.active = false;
+    updateRingDisplay();
+    commitScoreLedgerToTrello(activeCloudLedger.today);
+  } else {
+    if (!canTransformSuperSonic()) {
+      alert("Super Sonic requires all 7 Chaos Emeralds unlocked AND at least 50 Rings in reserve!");
+      return;
+    }
+    activeCloudLedger.superState.active = true;
+    activeCloudLedger.superState.startedAt = Date.now();
+    activeCloudLedger.superState.lastDrainAt = Date.now();
+    updateRingDisplay();
+    playPomoChime("chaos");
+    commitScoreLedgerToTrello(activeCloudLedger.today);
+  }
+}
+
+function processSuperSonicDrain() {
+  if (!isSuperSonicActive()) return;
+  const now = Date.now();
+  const lastDrain = activeCloudLedger.superState.lastDrainAt || now;
+  const elapsedSec = (now - lastDrain) / 1000;
+
+  // Drain 1 ring every 6 seconds (10 rings / min)
+  const ringsToDrain = Math.floor(elapsedSec / 6);
+  if (ringsToDrain >= 1) {
+    activeCloudLedger.ringBank = Math.max(0, (activeCloudLedger.ringBank || 0) - ringsToDrain);
+    activeCloudLedger.superState.lastDrainAt = now - ((elapsedSec % 6) * 1000);
+
+    if (activeCloudLedger.ringBank <= 0) {
+      activeCloudLedger.ringBank = 0;
+      activeCloudLedger.superState.active = false;
+      updateRingDisplay();
+      playPomoChime("complete");
+      alert("⚡ Super Sonic energy depleted! Returned to normal state.");
+      commitScoreLedgerToTrello(activeCloudLedger.today);
+    } else {
+      updateRingDisplay();
+    }
+  }
+}
+setInterval(processSuperSonicDrain, 1000);
+
+function openVaultModal() {
+  renderVaultInventory();
+  updateRingDisplay();
+  const m = document.getElementById("vaultModal");
+  if (m) m.classList.add("open");
+}
+
+function closeVaultModal() {
+  const m = document.getElementById("vaultModal");
+  if (m) m.classList.remove("open");
+}
+
+function renderVaultInventory() {
+  if (!activeCloudLedger.inventory) {
+    activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
+  }
+  const inv = activeCloudLedger.inventory;
+  const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setTxt("vaultQtyWarp", inv.warpTokens || 0);
+  setTxt("vaultQtyShield", inv.roadblockShields || 0);
+  setTxt("vaultQtyExtender", inv.deadlineExtenders || 0);
+  setTxt("vaultQtyDecomp", inv.decompBuffers || 0);
+  setTxt("vaultQtySpike", inv.spikePasses || 0);
+}
+
+function buyVaultItem(itemKey, cost) {
+  const currentRings = (activeCloudLedger && activeCloudLedger.ringBank) || 0;
+  if (currentRings < cost) {
+    alert(`Insufficient Rings! You need ${cost} rings (Current: ${currentRings}). Complete tasks to earn more!`);
+    return;
+  }
+  activeCloudLedger.ringBank -= cost;
+  if (!activeCloudLedger.inventory) activeCloudLedger.inventory = {};
+  activeCloudLedger.inventory[itemKey] = (activeCloudLedger.inventory[itemKey] || 0) + 1;
+  commitScoreLedgerToTrello(activeCloudLedger.today);
+  updateRingDisplay();
+  renderVaultInventory();
+  playPomoChime("chaos");
+}
+
+// --- MODALS & UI HANDLERS ---
 function openDebriefModal() {
   const ledger = loadDailyScoreLedger();
   const cal = state.calendarTelemetry || {};
