@@ -101,8 +101,8 @@
       <input type="text" id="quickCaptureInput" class="save-input" placeholder="Actionable deliverable with defined finish line (or tap 🔬 Spike)..." onkeydown="if(event.key==='Enter') submitQuickCapture()" />
       <button class="btn btn-primary" onclick="submitQuickCapture()">+ Add</button>
     </div>
-    <!-- Board Routing Pills -->
-    <div class="pill-row" id="workBoardPills" style="display:flex;">
+    <!-- Board Routing Pills (Dynamically Populated by applyTheme & Cloud Registry) -->
+    <div class="pill-row" id="quickCaptureBoardPills">
       <button class="pill active" data-board="work" onclick="selectCaptureBoard('work', '💼 Work')">💼 Work</button>
       <button class="pill" data-board="growth" onclick="selectCaptureBoard('growth', '🎓 Growth')">🎓 Growth</button>
     </div>
