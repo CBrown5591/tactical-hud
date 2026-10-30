@@ -128,7 +128,6 @@ function applyTheme() {
   const isMission = (ctx === "mission");
   const isPersonal = (ctx === "personal");
 
-  // Accent color mapping: Work (Sky Blue), Personal (Purple), Mission Control (High-Contrast Titanium)
   let accent = "#38bdf8";
   let title = "💼 WORK HUD";
   if (isMission) {
@@ -143,34 +142,35 @@ function applyTheme() {
   const modeTitleEl = document.getElementById("modeTitle");
   if (modeTitleEl) modeTitleEl.textContent = title;
 
-  // Toggle quick capture board pill rows
-  const workPills = document.getElementById("workBoardPills");
-  const personalPills = document.getElementById("personalBoardPills");
-  const missionPills = document.getElementById("missionBoardPills");
-
-  if (workPills) workPills.style.display = isWork ? "flex" : "none";
-  if (personalPills) personalPills.style.display = isPersonal ? "flex" : "none";
-  if (missionPills) missionPills.style.display = isMission ? "flex" : "none";
-
-  // Auto-set valid capture board when context switches
-  if (isWork) {
-    if (state.captureBoard !== "work" && state.captureBoard !== "growth") state.captureBoard = "work";
-  } else if (isMission) {
-    if (!["vi", "lab", "growth"].includes(state.captureBoard)) state.captureBoard = "vi";
-  } else {
-    state.captureBoard = "life";
-  }
-
-  // Update pill active classes
-  const currentContainer = isWork ? "#workBoardPills" : (isMission ? "#missionBoardPills" : "#personalBoardPills");
-  document.querySelectorAll(`${currentContainer} .pill`).forEach(btn => {
-    btn.classList.toggle("active", btn.dataset.board === state.captureBoard);
-  });
+  // Dynamically render Quick Capture pills based on active context and cloud boards
+  renderQuickCaptureBoardPills();
 
   const targetLabelEl = document.getElementById("captureTargetLabel");
   if (targetLabelEl) {
     targetLabelEl.textContent = `Target: ${BOARD_LABELS[state.captureBoard] || "Inbox"} -> 📥 Inbox`;
   }
+}
+
+function renderQuickCaptureBoardPills() {
+  const container = document.getElementById("quickCaptureBoardPills");
+  if (!container) return;
+
+  const activeBoards = typeof getActiveBoardsForContext === "function" 
+    ? getActiveBoardsForContext(state.context)
+    : [];
+
+  const keys = activeBoards.map(b => b.key);
+  if (!keys.includes(state.captureBoard) && keys.length > 0) {
+    state.captureBoard = keys[0];
+  }
+
+  container.innerHTML = activeBoards.map(b => `
+    <button type="button" class="pill ${state.captureBoard === b.key ? 'active' : ''}" 
+            data-board="${b.key}" 
+            onclick="selectCaptureBoard('${b.key}', '${b.icon || '🚀'} ${b.name}')">
+      ${b.icon || '🚀'} ${b.name}
+    </button>
+  `).join("");
 }
 
 function toggleManualContext() {
@@ -284,9 +284,10 @@ async function autoPromoteCards(results) {
   }
 
   const ctx = state.context;
-  let boardPriority = ["work", "growth"];
-  if (ctx === "mission") boardPriority = ["vi", "lab", "growth"];
-  else if (ctx === "personal") boardPriority = ["life"];
+  const activeBoards = typeof getActiveBoardsForContext === "function"
+    ? getActiveBoardsForContext(ctx)
+    : [];
+  const boardPriority = activeBoards.map(b => b.key);
   const getBoardPriorityIdx = (bKey) => {
     const idx = boardPriority.indexOf(bKey);
     return idx === -1 ? 99 : idx;
@@ -428,9 +429,17 @@ async function syncHud() {
   // Re-calculate energy quotas for the resolved context
   state.energyQuotas = calculateEnergyQuotas(calData);
 
-  let activeKeys = ["work", "growth"];
-  if (state.context === "mission") activeKeys = ["vi", "lab", "growth"];
-  else if (state.context === "personal") activeKeys = ["life"];
+  // Ingest custom cloud boards into runtime config & labels
+  const customBoards = typeof getCustomBoards === "function" ? getCustomBoards() : [];
+  customBoards.forEach(b => {
+    cfg.boards[b.key] = b.id;
+    BOARD_LABELS[b.key] = `${b.icon || '🚀'} ${b.name}`;
+  });
+
+  const activeBoards = typeof getActiveBoardsForContext === "function"
+    ? getActiveBoardsForContext(state.context)
+    : [];
+  const activeKeys = activeBoards.map(b => b.key);
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
   try {

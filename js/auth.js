@@ -105,6 +105,9 @@ function openSettings() {
   if (yelEl) yelEl.value = kw.yellow || "";
   if (grnEl) grnEl.value = kw.green || "";
 
+  // Render dynamic board sources list
+  renderCustomBoardsSettingsList();
+
   document.getElementById("settingsModal").classList.add("open");
 }
 
@@ -162,4 +165,66 @@ async function saveSettings() {
 
   closeSettings();
   syncHud();
+}
+
+// --- DYNAMIC BOARD SOURCE UI ACTIONS ---
+function renderCustomBoardsSettingsList() {
+  const container = document.getElementById("customBoardsList");
+  if (!container) return;
+
+  const boards = typeof getCustomBoards === "function" ? getCustomBoards() : [];
+  if (boards.length === 0) {
+    container.innerHTML = `<div style="font-size:0.72rem; color:var(--muted); font-style:italic; padding:4px 0;">No custom board sources added yet.</div>`;
+    return;
+  }
+
+  const ctxNames = { work: "💼 Work", personal: "🏠 Personal", mission: "🚀 Mission" };
+
+  container.innerHTML = boards.map(b => `
+    <div style="background:#090d16; border:1px solid #1e293b; border-radius:6px; padding:6px 10px; display:flex; justify-content:space-between; align-items:center; font-size:0.75rem;">
+      <div style="display:flex; align-items:center; gap:8px;">
+        <span style="font-size:1rem;">${b.icon || '🚀'}</span>
+        <strong style="color:#fff;">${b.name}</strong>
+        <span style="font-size:0.65rem; color:#38bdf8; background:#1e293b; padding:1px 6px; border-radius:4px;">${ctxNames[b.context] || b.context}</span>
+        <span style="font-size:0.65rem; color:var(--muted); font-family:monospace;">(${b.id})</span>
+      </div>
+      <button type="button" class="btn" style="color:#f87171; border-color:#7f1d1d; padding:2px 6px; font-size:0.7rem;" onclick="removeCustomBoardAction('${b.key}')">✕ Remove</button>
+    </div>
+  `).join("");
+}
+
+async function addCustomBoardAction() {
+  const nameInput = document.getElementById("newBoardName");
+  const idInput = document.getElementById("newBoardId");
+  const ctxInput = document.getElementById("newBoardContext");
+  const iconInput = document.getElementById("newBoardIcon");
+
+  const name = nameInput.value.trim();
+  const rawId = idInput.value.trim();
+  const context = ctxInput.value;
+  const icon = iconInput.value.trim() || "🚀";
+
+  if (!name || !rawId) return alert("Please provide both a Board Name and a Trello Board ID/URL.");
+
+  try {
+    await addCustomBoard(name, rawId, context, icon);
+    nameInput.value = "";
+    idInput.value = "";
+    renderCustomBoardsSettingsList();
+    if (typeof syncHud === "function") await syncHud();
+    alert(`✓ "${name}" added to cloud and synced across all devices!`);
+  } catch (e) {
+    alert("Failed to add board: " + e.message);
+  }
+}
+
+async function removeCustomBoardAction(boardKey) {
+  if (!confirm("Are you sure you want to remove this board from your cloud sync?")) return;
+  try {
+    await removeCustomBoard(boardKey);
+    renderCustomBoardsSettingsList();
+    if (typeof syncHud === "function") await syncHud();
+  } catch (e) {
+    alert("Failed to remove board: " + e.message);
+  }
 }
