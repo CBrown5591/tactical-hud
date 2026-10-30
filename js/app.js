@@ -507,6 +507,7 @@ async function syncHud() {
 
     renderCards();
     updateQuickCaptureBlockerDropdown();
+    if (typeof updateRingDisplay === "function") updateRingDisplay();
   } catch (err) {
     console.error(err);
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
@@ -547,12 +548,18 @@ function renderCards() {
         <div class="task-title">${escapeHtml(c.name)}</div>
         <div class="task-meta">
           <span class="board-tag">${c.boardName}</span>
+          <span class="energy-picker" title="Adjust Energy Quota">
+            <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
+            <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
+            <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
+          </span>
           ${dueTag}
           ${blockerTag}
         </div>
         ${noteSnippet}
       </div>
       <div class="task-actions">
+        <button class="icon-btn" title="1:1 Warp Swap (Bypass)" onclick="promptWarpSwap('${c.id}','${c.boardKey}','${c.energy}')">⇄</button>
         <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
         <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
         <button class="icon-btn done" title="Complete Task" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
@@ -662,6 +669,29 @@ async function setCardRecurCadence(newCadence) {
   }
 }
 
+function updateModalEnergyPills(card) {
+  const energy = card ? card.energy : "none";
+  const map = {
+    red: "modalEnergyRed",
+    yellow: "modalEnergyYellow",
+    green: "modalEnergyGreen"
+  };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (el) el.classList.toggle("active", k === energy);
+  });
+}
+
+async function setModalCardEnergy(newEnergy) {
+  if (!state.activeNoteCard) return;
+  const { id, boardKey } = state.activeNoteCard;
+  if (typeof setCardEnergy === "function") {
+    await setCardEnergy(id, boardKey, newEnergy);
+    const updated = state.allLoadedCards.find(c => c.id === id);
+    if (updated) updateModalEnergyPills(updated);
+  }
+}
+
 function openNoteModal(cardId, boardKey) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
   if (!card) return;
@@ -674,6 +704,7 @@ function openNoteModal(cardId, boardKey) {
   renderModalComments(card.comments || []);
   renderModalBlockers(card);
   updateModalRecurPills(card);
+  updateModalEnergyPills(card);
   document.getElementById("cardNoteModal").classList.add("open");
 }
 
@@ -740,6 +771,98 @@ async function submitQuickCapture() {
   }
 
   syncHud();
+}
+
+// --- 1:1 WARP SWAP (BYPASS LANE) ENGINE ---
+let _activeWarp = { sourceId: null, boardKey: null, energy: null };
+
+function promptWarpSwap(cardId, boardKey, energy) {
+  const card = state.allLoadedCards.find(c => c.id === cardId);
+  if (!card) return;
+  _activeWarp = { sourceId: cardId, boardKey, energy };
+
+  document.getElementById("warpSourceName").textContent = `[${card.boardName}] ${card.name}`;
+  const select = document.getElementById("warpTargetSelect");
+  const allowanceEl = document.getElementById("warpAllowanceStatus");
+  const confirmBtn = document.getElementById("confirmWarpBtn");
+
+  // Filter queue cards across active boards that share the exact same energy tier
+  const eligibleQueue = state.allLoadedCards.filter(c => {
+    const cache = state.boardCache[c.boardKey];
+    const isQueue = cache && cache.listMap && c.idList === cache.listMap.queue;
+    return isQueue && c.energy === energy && c.id !== cardId;
+  });
+
+  if (eligibleQueue.length === 0) {
+    select.innerHTML = `<option value="">-- No matching ${energy.toUpperCase()} tasks in Queue --</option>`;
+    confirmBtn.disabled = true;
+  } else {
+    select.innerHTML = eligibleQueue.map(c => `<option value="${c.id}">[${c.boardName}] ${escapeHtml(c.name)}</option>`).join("");
+    confirmBtn.disabled = false;
+  }
+
+  const isSuper = typeof isSuperSonicActive === "function" && isSuperSonicActive();
+  const freeAvailable = !(activeCloudLedger.today && activeCloudLedger.today.dailyFreeWarpUsed);
+  const tokenCount = (activeCloudLedger.inventory && activeCloudLedger.inventory.warpTokens) || 0;
+
+  if (isSuper) {
+    allowanceEl.textContent = "⚡ SUPER SONIC ACTIVE: Unlimited Free 1:1 Warps Available!";
+    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
+  } else if (freeAvailable) {
+    allowanceEl.textContent = "Daily Free Warp Available (1/1 Remaining). Zero ring cost.";
+    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
+  } else if (tokenCount > 0) {
+    allowanceEl.textContent = `Using Inventory Warp Token (${tokenCount} remaining). Zero ring cost.`;
+    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
+  } else {
+    allowanceEl.textContent = "⚠️ No Warp allowances remaining today. Visit the Vault to purchase a Warp Token for 175 Rings.";
+    confirmBtn.disabled = true;
+  }
+
+  document.getElementById("warpModal").classList.add("open");
+}
+
+function closeWarpModal() {
+  document.getElementById("warpModal").classList.remove("open");
+}
+
+async function confirmWarpSwap() {
+  const targetCardId = document.getElementById("warpTargetSelect").value;
+  if (!targetCardId || !_activeWarp.sourceId) return;
+
+  const sourceCard = state.allLoadedCards.find(c => c.id === _activeWarp.sourceId);
+  const targetCard = state.allLoadedCards.find(c => c.id === targetCardId);
+  if (!sourceCard || !targetCard) return;
+
+  const sourceCache = state.boardCache[sourceCard.boardKey];
+  const targetCache = state.boardCache[targetCard.boardKey];
+  if (!sourceCache || !targetCache) return;
+
+  closeWarpModal();
+
+  try {
+    // 1. Move source card from Today back to top of Queue
+    await trelloFetch(`/cards/${sourceCard.id}`, "PUT", `&idList=${sourceCache.listMap.queue}&pos=top`);
+    // 2. Move target card from Queue into Today
+    await trelloFetch(`/cards/${targetCard.id}`, "PUT", `&idList=${targetCache.listMap.today}&pos=top`);
+
+    // Consume allowance if not Super Sonic
+    const isSuper = typeof isSuperSonicActive === "function" && isSuperSonicActive();
+    if (!isSuper) {
+      if (!activeCloudLedger.today.dailyFreeWarpUsed) {
+        activeCloudLedger.today.dailyFreeWarpUsed = true;
+      } else if (activeCloudLedger.inventory && activeCloudLedger.inventory.warpTokens > 0) {
+        activeCloudLedger.inventory.warpTokens--;
+      }
+      commitScoreLedgerToTrello(activeCloudLedger.today);
+    }
+
+    if (typeof playPomoChime === "function") playPomoChime("chaos");
+    await syncHud();
+  } catch (e) {
+    console.error("Warp swap failed:", e);
+    alert("Failed to execute 1:1 Warp Swap: " + e.message);
+  }
 }
 
 function escapeHtml(str) {
