@@ -24,16 +24,20 @@ async function fetchBoardData(boardKey, boardId) {
   lists.forEach(l => {
     const name = (l.name || "").toLowerCase().trim();
     if (name.includes("inbox") || name.includes("triage") || name.includes("incoming") || name.includes("capture")) listMap.inbox = l.id;
-    else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress") || name.includes("to do") || name.includes("todo")) listMap.today = l.id;
+    else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress")) listMap.today = l.id;
     else if (name.includes("waiting") || name.includes("blocked") || name.includes("pending") || name.includes("hold")) listMap.waiting = l.id;
-    else if (name.includes("queue") || name.includes("backlog") || name.includes("next") || name.includes("later")) listMap.queue = l.id;
+    else if (name.includes("queue") || name.includes("backlog") || name.includes("next") || name.includes("later") || name.includes("ready") || name.includes("to do")) listMap.queue = l.id;
     else if (name.includes("done") || name.includes("complete") || name.includes("archive")) listMap.done = l.id;
   });
 
-  // Fallbacks if exact names aren't matched
   if (!listMap.inbox && lists.length > 0) listMap.inbox = lists[0].id;
   if (!listMap.today && lists.length > 1) listMap.today = lists[1].id;
   if (!listMap.queue && lists.length > 2) listMap.queue = lists[2].id;
+  if (!listMap.queue && lists.length > 0) {
+    const fallbackList = lists.find(l => l.id !== listMap.inbox && l.id !== listMap.today && l.id !== listMap.done);
+    if (fallbackList) listMap.queue = fallbackList.id;
+    else listMap.queue = lists[lists.length - 1].id;
+  }
 
   const labelMap = {};
   const recurLabelMap = {};
@@ -258,7 +262,6 @@ function openWeeklyReportModal() {
   report += `\n=========================================\nTactical Focus HUD • Executive Telemetry\n`;
   contentBox.value = report;
 
-  // Update visual modal UI elements
   const emeraldContainer = document.getElementById("weeklyEmeraldDisplay");
   if (emeraldContainer && weekStats) {
     renderEmeraldStrip("weeklyEmeraldDisplay", weekStats);
