@@ -1,7 +1,7 @@
 // --- js/app.js: Application Core, State, Routing & UI Renderers ---
 
-var STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
-var BOARD_LABELS = window.BOARD_LABELS || {
+window.STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
+window.BOARD_LABELS = window.BOARD_LABELS || {
   work: "💼 Work",
   life: "🎢 King's Dominion",
   vi: "🏝️ By The VI",
@@ -9,7 +9,7 @@ var BOARD_LABELS = window.BOARD_LABELS || {
   growth: "🎓 Growth"
 };
 
-var state = window.state || {
+window.state = window.state || {
   context: "work",
   manualOverride: false,
   energyFilter: "all",
@@ -28,6 +28,9 @@ var state = window.state || {
   calendarTelemetry: { bookedHours: 0, eventCount: 0, nextEvent: null },
   energyQuotas: { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" }
 };
+var state = window.state;
+var BOARD_LABELS = window.BOARD_LABELS;
+var STORAGE_KEY = window.STORAGE_KEY;
 
 function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
