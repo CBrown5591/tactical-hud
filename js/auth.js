@@ -1,4 +1,4 @@
-// --- js/auth.js: Security Passcode & Config Management ---
+// --- js/auth.js: Security Passcode, Config & Dynamic Board Management ---
 
 async function hashString(str) {
   if (!str) return "";
@@ -14,7 +14,7 @@ function getSavedPasscodeHash() {
 
 function isHudUnlocked() {
   const passHash = getSavedPasscodeHash();
-  if (!passHash) return true; // No password configured
+  if (!passHash) return true;
   return sessionStorage.getItem("TACTICAL_HUD_SESSION_AUTH") === "true";
 }
 
@@ -65,7 +65,6 @@ function loadConfig() {
   }
   const winCfg = window.HUD_CONFIG || {};
 
-  // Deep merge board maps and properties so credentials in either file or localStorage are recognized
   const mergedBoards = { ...(localCfg.boards || {}), ...(winCfg.boards || {}) };
 
   const merged = {
@@ -96,7 +95,7 @@ function openSettings() {
   const calInput = document.getElementById("cfgCalendarWebhook");
   if (calInput) calInput.value = cfg.calendarWebhook || "";
 
-  // Populate cloud-synced keywords
+  // Populate cloud keywords
   const kw = (typeof getActiveEnergyKeywords === "function") ? getActiveEnergyKeywords() : { red: "", yellow: "", green: "" };
   const redEl = document.getElementById("cfgKwRed");
   const yelEl = document.getElementById("cfgKwYellow");
