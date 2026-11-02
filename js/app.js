@@ -1,7 +1,7 @@
 // --- js/app.js: Application Core, State, Routing & UI Renderers ---
 
-window.STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
-window.BOARD_LABELS = window.BOARD_LABELS || {
+var STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
+var BOARD_LABELS = window.BOARD_LABELS || {
   work: "💼 Work",
   life: "🎢 King's Dominion",
   vi: "🏝️ By The VI",
@@ -9,7 +9,7 @@ window.BOARD_LABELS = window.BOARD_LABELS || {
   growth: "🎓 Growth"
 };
 
-window.state = window.state || {
+var state = window.state || {
   context: "work",
   manualOverride: false,
   energyFilter: "all",
@@ -28,9 +28,6 @@ window.state = window.state || {
   calendarTelemetry: { bookedHours: 0, eventCount: 0, nextEvent: null },
   energyQuotas: { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" }
 };
-var state = window.state;
-var BOARD_LABELS = window.BOARD_LABELS;
-var STORAGE_KEY = window.STORAGE_KEY;
 
 function calculateEnergyQuotas(calData = null) {
   const isWork = state.context === "work";
@@ -107,7 +104,8 @@ function determineAutoContext(cfg, calTelemetry = null) {
   const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
 
-  // Off-day morning routes to Mission Control for venture builds; evening to Personal
+  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO):
+  // Morning routes to Mission Control for venture builds; evening to Personal
   if (calTelemetry && calTelemetry.isWorkOffDay) {
     return hour < 13.0 ? "mission" : "personal";
   }
@@ -120,6 +118,7 @@ function determineAutoContext(cfg, calTelemetry = null) {
     return "personal";
   }
 
+  // Weekends: Default to Personal
   return "personal";
 }
 
@@ -143,6 +142,7 @@ function applyTheme() {
   const modeTitleEl = document.getElementById("modeTitle");
   if (modeTitleEl) modeTitleEl.textContent = title;
 
+  // Dynamically render Quick Capture pills based on active context and cloud boards
   renderQuickCaptureBoardPills();
 
   const targetLabelEl = document.getElementById("captureTargetLabel");
@@ -175,6 +175,7 @@ function renderQuickCaptureBoardPills() {
 
 function toggleManualContext() {
   state.manualOverride = true;
+  // 3-way cyclic rotation: Work -> Mission Control -> Personal -> Work
   if (state.context === "work") state.context = "mission";
   else if (state.context === "mission") state.context = "personal";
   else state.context = "work";
@@ -200,8 +201,9 @@ function selectCaptureRecur(cadence) {
   document.querySelectorAll("[data-cap-recur]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.capRecur === cadence);
   });
-  // Requirement 1: If recurring cadence selected, clear forced due date
-  if (cadence !== "none") {
+
+  // FEATURE: Recurring tasks DO NOT get deadlines forced by default!
+  if (cadence !== "none" && !state.captureCustomDueExplicit) {
     selectCaptureDue("none");
   }
 }
@@ -252,7 +254,11 @@ function selectCaptureDue(preset) {
 }
 
 function selectCaptureCustomDue(val) {
-  if (!val) return selectCaptureDue("none");
+  if (!val) {
+    state.captureCustomDueExplicit = false;
+    return selectCaptureDue("none");
+  }
+  state.captureCustomDueExplicit = true;
   const parts = val.split("-");
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 17, 0, 0);
   state.captureDue = d.toISOString();
@@ -287,7 +293,6 @@ async function autoPromoteCards(results) {
     ? getActiveBoardsForContext(ctx)
     : [];
   const boardPriority = activeBoards.map(b => b.key);
-
   const getBoardPriorityIdx = (bKey) => {
     const idx = boardPriority.indexOf(bKey);
     return idx === -1 ? 99 : idx;
@@ -295,7 +300,7 @@ async function autoPromoteCards(results) {
 
   const quotas = state.energyQuotas || calculateEnergyQuotas(0);
 
-  // --- PHASE 1: COLLECT TODAY CARDS ---
+  // --- PHASE 1: COLLECT ALL CURRENT TODAY CARDS ACROSS BOARDS ---
   const todayEntries = [];
   results.forEach(({ boardKey, listMap, cards }) => {
     if (!listMap.today) return;
@@ -307,7 +312,7 @@ async function autoPromoteCards(results) {
     });
   });
 
-  // --- PHASE 2: OVERFLOW REBALANCING ---
+  // --- PHASE 2: OVERFLOW REBALANCING (DEMOTE EXCESS BASED ON PRIORITY) ---
   for (const energy of ["red", "yellow", "green"]) {
     const matching = todayEntries.filter(e => e.energy === energy);
     const maxAllowed = quotas[energy] || 0;
@@ -332,6 +337,7 @@ async function autoPromoteCards(results) {
             const idx = todayEntries.findIndex(e => e.card.id === entry.card.id);
             if (idx !== -1) todayEntries.splice(idx, 1);
             changedAny = true;
+            console.log(`[Quota Enforcer] Demoted overflow ${entry.energy} task "${entry.card.name}" from ${entry.boardKey} back to Queue.`);
           } catch (e) {
             console.error("Failed to demote overflow card:", entry.card.id, e);
           }
@@ -340,7 +346,7 @@ async function autoPromoteCards(results) {
     }
   }
 
-  // --- PHASE 3: CALCULATE SLOTS ---
+  // --- PHASE 3: CALCULATE REMAINING GLOBAL SLOTS ---
   const currentCounts = { red: 0, yellow: 0, green: 0 };
   todayEntries.forEach(e => {
     if (currentCounts[e.energy] !== undefined) currentCounts[e.energy]++;
@@ -393,6 +399,7 @@ async function autoPromoteCards(results) {
         slots[col]--;
         totalSlots--;
         changedAny = true;
+        console.log(`[Unified Auto-Promote] Promoted ${col} task "${candidate.card.name}" from [${candidate.boardKey}] to Today.`);
       } catch (e) {
         console.error("Auto-promote failed for card:", candidate.card.id, e);
       }
@@ -491,7 +498,6 @@ async function syncHud() {
           const autoInferred = inferEnergyFromTitle(card.name);
           if (autoInferred !== "none") {
             energyColor = autoInferred;
-            const cache = state.boardCache[boardKey];
             if (cache && cache.labelMap && cache.labelMap[autoInferred]) {
               setCardEnergy(card.id, boardKey, autoInferred).catch(e => console.warn("Auto-label failed:", e));
             }
@@ -591,7 +597,7 @@ function renderCards() {
 
     let dueTag = "";
     if (c.due && typeof calculateDeadlineModifier === "function") {
-      const mod = calculateDeadlineModifier(c.energy, c.due, c);
+      const mod = calculateDeadlineModifier(c.energy, c.due);
       const modColor = mod.type === "early" ? "#38bdf8" : (mod.type === "ontime" ? "#22c55e" : "#f43f5e");
       dueTag = `<span style="background:#090d16; border:1px solid ${modColor}; color:${modColor}; padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700;">📅 ${mod.label}</span>`;
     }
@@ -615,7 +621,7 @@ function renderCards() {
         <button class="icon-btn" title="1:1 Warp Swap (Bypass)" onclick="promptWarpSwap('${c.id}','${c.boardKey}','${c.energy}')">⇄</button>
         <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
         <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
-        <button class="icon-btn done" title="Complete Task" onclick="promptCompleteCard('${c.id}','${c.boardKey}')">✓</button>
+        <button class="icon-btn done" title="Complete Task" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
       </div>
     `;
     todayContainer.appendChild(el);
@@ -642,7 +648,7 @@ function renderCards() {
         <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
         <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
         <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
-        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="promptCompleteCard('${c.id}','${c.boardKey}')">✓</button>
+        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
       </div>
     `;
     inboxContainer.appendChild(el);
@@ -789,12 +795,7 @@ async function submitQuickCapture() {
   }
 
   let labelParam = labelIds.length > 0 ? `&idLabels=${labelIds.join(",")}` : "";
-  
-  // Requirement 1: If task is recurring, omit due date so it's purely event-driven
-  let dueParam = "";
-  if (state.captureRecur === "none" && state.captureDue) {
-    dueParam = `&due=${encodeURIComponent(state.captureDue)}`;
-  }
+  let dueParam = state.captureDue ? `&due=${encodeURIComponent(state.captureDue)}` : "";
 
   let descParam = "";
   if (isSpikeTask) {
@@ -806,6 +807,7 @@ async function submitQuickCapture() {
   const blockerId = blockerSelect ? blockerSelect.value : "";
 
   input.value = "";
+  state.captureCustomDueExplicit = false;
   selectCaptureDue("none");
   selectCaptureRecur("none");
   state.captureIsSpike = false;
@@ -832,7 +834,7 @@ async function submitQuickCapture() {
 }
 
 // --- 1:1 WARP SWAP (BYPASS LANE) ENGINE ---
-let _activeWarp = { sourceId: null, boardKey: null, energy: null };
+var _activeWarp = window._activeWarp || { sourceId: null, boardKey: null, energy: null };
 
 function promptWarpSwap(cardId, boardKey, energy) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
@@ -987,65 +989,81 @@ async function fetchCalendarTelemetry() {
   }
 }
 
-// --- RETROACTIVE ON-TIME COMPLETION PROMPT (REQUIREMENT 2) ---
-let _pendingCompleteCard = null;
+// --- RETROACTIVE ON-TIME COMPLETION ENGINE ---
+var _retroCompletion = window._retroCompletion || { cardId: null, boardKey: null };
 
-function promptCompleteCard(cardId, boardKey) {
+function isCardOverdue(card) {
+  if (!card || !card.due) return false;
+  if (typeof isSuperSonicActive === "function" && isSuperSonicActive()) return false;
+
+  const now = new Date();
+  const dueDate = new Date(card.due);
+  const isWork = (state && state.context === "work");
+
+  if (isWork && typeof calculateBusinessHours === "function") {
+    if (now <= dueDate) return false;
+    const overdueBusHours = calculateBusinessHours(dueDate, now);
+    return overdueBusHours > 2.0; // Overdue beyond grace window
+  } else {
+    const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    return diffHours < -4.0; // Overdue beyond 4h grace
+  }
+}
+
+async function completeCard(cardId, boardKey) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
   if (!card) return;
 
-  const mod = typeof calculateDeadlineModifier === "function" 
-    ? calculateDeadlineModifier(card.energy, card.due, card)
-    : { isOverdue: false };
-
-  // If card is past deadline, prompt user to confirm whether finished on time
-  if (mod.isOverdue) {
-    _pendingCompleteCard = { cardId, boardKey, card };
-    document.getElementById("retroModalCardTitle").textContent = card.name;
-    document.getElementById("retroModalDueDetail").textContent = `Due: ${new Date(card.due).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
-    document.getElementById("retroCompleteModal").classList.add("open");
-    return;
+  // If card has an overdue deadline, prompt retroactive verification
+  if (isCardOverdue(card)) {
+    _retroCompletion = { cardId, boardKey };
+    const modal = document.getElementById("retroactiveModal");
+    const titleEl = document.getElementById("retroactiveCardTitle");
+    if (modal && titleEl) {
+      titleEl.textContent = card.name;
+      modal.classList.add("open");
+      return;
+    }
   }
 
-  executeCompleteCard(cardId, boardKey, false);
+  await finishCardCompletion(cardId, boardKey, false);
 }
 
-function closeRetroCompleteModal() {
-  const modal = document.getElementById("retroCompleteModal");
+function closeRetroactiveModal() {
+  const modal = document.getElementById("retroactiveModal");
   if (modal) modal.classList.remove("open");
-  _pendingCompleteCard = null;
+  _retroCompletion = { cardId: null, boardKey: null };
 }
 
-async function confirmRetroactiveComplete(isRetroactiveWaiver) {
-  if (!_pendingCompleteCard) return closeRetroCompleteModal();
-  const { cardId, boardKey } = _pendingCompleteCard;
-  closeRetroCompleteModal();
-
-  if (isRetroactiveWaiver) {
-    try {
-      await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent("✓ Verified On-Time Completion (Waived Late Penalty)")}`);
-    } catch (e) {}
-  }
-
-  await executeCompleteCard(cardId, boardKey, isRetroactiveWaiver);
+async function confirmCompleteCard(isRetroactiveOnTime) {
+  const { cardId, boardKey } = _retroCompletion;
+  closeRetroactiveModal();
+  if (!cardId || !boardKey) return;
+  await finishCardCompletion(cardId, boardKey, isRetroactiveOnTime);
 }
 
-async function executeCompleteCard(cardId, boardKey, isRetroactiveWaiver = false) {
+async function finishCardCompletion(cardId, boardKey, isRetroactiveOnTime = false) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
   if (card && typeof recordCardCompleted === "function") {
-    await recordCardCompleted(card, isRetroactiveWaiver);
+    await recordCardCompleted(card, isRetroactiveOnTime);
   }
+
+  // If retroactive on-time completion verified, document comment in Trello
+  if (isRetroactiveOnTime && cardId) {
+    try {
+      const commentText = `🎯 VERIFIED ON-TIME CLEAR: Completed before deadline (Late tax waived).`;
+      await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent(commentText)}`);
+    } catch (e) {
+      console.warn("Could not post on-time verification comment:", e);
+    }
+  }
+
   await moveCard(cardId, boardKey, 'done');
 }
 
-// Legacy fallback
-async function completeCard(cardId, boardKey) {
-  promptCompleteCard(cardId, boardKey);
-}
-
 // --- BACKGROUND AUTO-REFRESH & DEVICE SYNC ENGINE ---
-let _autoSyncTimer = null;
-const AUTO_SYNC_INTERVAL_MS = 60 * 1000;
+var _autoSyncTimer = window._autoSyncTimer || null;
+var AUTO_SYNC_INTERVAL_MS = window.AUTO_SYNC_INTERVAL_MS || (60 * 1000);
 
 function isUserInputActive() {
   const activeEl = document.activeElement;
@@ -1084,6 +1102,6 @@ window.addEventListener("focus", () => {
 
 window.addEventListener("DOMContentLoaded", () => {
   syncHud();
-  if (typeof updatePomoDisplay === "function") updatePomoDisplay();
+  updatePomoDisplay();
   scheduleNextAutoSync();
 });
