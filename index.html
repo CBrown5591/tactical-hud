@@ -537,6 +537,25 @@
     </div>
   </div>
 
+<!-- 1:1 WARP SWAP MODAL -->
+  <div class="modal-backdrop" id="warpModal">
+    <div class="modal" style="max-width: 440px;">
+      <h2 style="font-size:1.05rem; margin-bottom:6px; color:#38bdf8;">⇄ 1:1 Warp Swap (Bypass Lane)</h2>
+      <p style="font-size:0.75rem; color:#cbd5e1; margin-bottom:10px;">
+        Swapping source task: <strong id="warpSourceName" style="color:#fff;"></strong> back to Queue while pulling a matching energy task into Today.
+      </p>
+      <div class="field">
+        <label style="color:#94a3b8; font-size:0.75rem;">Select Target Queue Task:</label>
+        <select id="warpTargetSelect" style="background:#090d16; color:#fff; border:1px solid #334155; border-radius:8px; padding:8px; width:100%; font-size:0.82rem; outline:none;"></select>
+      </div>
+      <div id="warpAllowanceStatus" style="font-size:0.7rem; color:var(--accent); margin-bottom:12px; font-weight:600;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:8px;">
+        <button class="btn" onclick="closeWarpModal()">Cancel</button>
+        <button class="btn btn-primary" id="confirmWarpBtn" onclick="confirmWarpSwap()">Execute Warp Swap</button>
+      </div>
+    </div>
+  </div>
+  
   <!-- Modular Architecture -->
   <!-- Ensure you only have these tags once at the bottom of index.html -->
   <script src="js/auth.js?v=3.9"></script>
