@@ -337,7 +337,6 @@ async function autoPromoteCards(results) {
             const idx = todayEntries.findIndex(e => e.card.id === entry.card.id);
             if (idx !== -1) todayEntries.splice(idx, 1);
             changedAny = true;
-            console.log(`[Quota Enforcer] Demoted overflow ${entry.energy} task "${entry.card.name}" from ${entry.boardKey} back to Queue.`);
           } catch (e) {
             console.error("Failed to demote overflow card:", entry.card.id, e);
           }
@@ -399,7 +398,6 @@ async function autoPromoteCards(results) {
         slots[col]--;
         totalSlots--;
         changedAny = true;
-        console.log(`[Unified Auto-Promote] Promoted ${col} task "${candidate.card.name}" from [${candidate.boardKey}] to Today.`);
       } catch (e) {
         console.error("Auto-promote failed for card:", candidate.card.id, e);
       }
@@ -420,7 +418,6 @@ async function syncHud() {
 
   state.energyQuotas = calculateEnergyQuotas(calData);
 
-  // Ingest custom cloud boards into runtime config & labels
   const customBoards = typeof getCustomBoards === "function" ? getCustomBoards() : [];
   customBoards.forEach(b => {
     cfg.boards[b.key] = b.id;
@@ -438,7 +435,6 @@ async function syncHud() {
       try {
         return await fetchBoardData(k, cfg.boards[k]);
       } catch (err) {
-        console.warn(`[HUD Sync Warning] Skipped board '${k}' (${cfg.boards[k]}):`, err.message);
         return { boardKey: k, listMap: {}, cards: [], error: err.message };
       }
     });
@@ -473,7 +469,7 @@ async function syncHud() {
     }
 
     results.forEach(({ boardKey, listMap, cards }) => {
-      const cache = state.boardCache[boardKey];
+      const cache = state.boardCache[boardKey]; // Fixed cache reference
       cards.forEach(card => {
         if (card.name.startsWith("🎯 SAVE STATE")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
@@ -847,17 +843,27 @@ function promptWarpSwap(cardId, boardKey, energy) {
   const allowanceEl = document.getElementById("warpAllowanceStatus");
   const confirmBtn = document.getElementById("confirmWarpBtn");
 
-  const eligibleQueue = state.allLoadedCards.filter(c => {
+  // 1. Try strict energy match in Queue
+  let eligibleQueue = state.allLoadedCards.filter(c => {
     const cache = state.boardCache[c.boardKey];
     const isQueue = cache && cache.listMap && c.idList === cache.listMap.queue;
     return isQueue && c.energy === energy && c.id !== cardId;
   });
 
+  // 2. Fallback: If no exact energy match in Queue, allow any task in Queue
   if (eligibleQueue.length === 0) {
-    select.innerHTML = `<option value="">-- No matching ${energy.toUpperCase()} tasks in Queue --</option>`;
+    eligibleQueue = state.allLoadedCards.filter(c => {
+      const cache = state.boardCache[c.boardKey];
+      const isQueue = cache && cache.listMap && c.idList === cache.listMap.queue;
+      return isQueue && c.id !== cardId;
+    });
+  }
+
+  if (eligibleQueue.length === 0) {
+    select.innerHTML = `<option value="">-- No tasks available in Queue --</option>`;
     confirmBtn.disabled = true;
   } else {
-    select.innerHTML = eligibleQueue.map(c => `<option value="${c.id}">[${c.boardName}] ${escapeHtml(c.name)}</option>`).join("");
+    select.innerHTML = eligibleQueue.map(c => `<option value="${c.id}">[${c.boardName}] (${c.energy.toUpperCase()}) ${escapeHtml(c.name)}</option>`).join("");
     confirmBtn.disabled = false;
   }
 
