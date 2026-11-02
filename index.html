@@ -378,6 +378,25 @@
     </div>
   </div>
 
+<!-- RETROACTIVE ON-TIME COMPLETION PROMPT MODAL -->
+  <div class="modal-backdrop" id="retroactiveModal">
+    <div class="modal" style="max-width: 440px;">
+      <h2 style="font-size:1.05rem; margin-bottom:6px; color:#fde047;">⏳ Task Completed Past Deadline</h2>
+      <p style="font-size:0.75rem; color:#cbd5e1; margin-bottom:12px;">
+        <strong id="retroactiveCardTitle" style="color:#fff;"></strong> has a deadline that passed. Did you complete this on time or just now?
+      </p>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <button class="btn btn-primary" onclick="confirmCompleteCard(true)" style="padding:10px; font-weight:700;">
+          🎯 Actually Finished On Time (Waiver ✓)
+        </button>
+        <button class="btn" onclick="confirmCompleteCard(false)" style="padding:10px; color:#fca5a5; border-color:#7f1d1d;">
+          ⚠️ Completed Late Just Now (Apply Tax)
+        </button>
+        <button class="btn" onclick="closeRetroactiveModal()" style="margin-top:4px;">Cancel</button>
+      </div>
+    </div>
+  </div>
+  
   <!-- ROADBLOCK DEFERRAL MICRO-PROMPT MODAL -->
   <div class="modal-backdrop" id="deferralModal">
     <div class="modal" style="max-width: 440px;">
