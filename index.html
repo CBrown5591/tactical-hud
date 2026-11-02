@@ -12,6 +12,24 @@
   <link rel="apple-touch-icon" href="icon-192.png" />
   <link rel="stylesheet" href="style.css" />
   <script src="config.js" onerror="console.log('No external config.js found. Using localStorage config.');"></script>
+  <script>
+  // Force-kill any rogue Service Workers and wipe stale caches across all devices
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+      for (var reg of registrations) {
+        reg.unregister();
+        console.log('[SW] Evicted foreign worker:', reg.scope);
+      }
+    });
+  }
+  if ('caches' in window) {
+    caches.keys().then(function(names) {
+      for (var name of names) {
+        caches.delete(name);
+      }
+    });
+  }
+</script>
 </head>
 <body>
   <!-- FULL SCREEN LOCK OVERLAY -->
