@@ -521,6 +521,7 @@ async function syncHud() {
 
         const item = {
           id: card.id,
+          idList: card.idList, // <--- ADD THIS LINE
           name: card.name,
           desc: card.desc || "",
           due: card.due || "",
