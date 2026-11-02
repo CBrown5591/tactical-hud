@@ -1,5 +1,26 @@
 // --- js/auth.js: Security Passcode, Config & Dynamic Board Management ---
 
+// Force-evict conflicting service workers on this origin
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for (const registration of registrations) {
+      console.warn('[SW Killer] Unregistering conflicting worker:', registration.scope);
+      registration.unregister();
+    }
+  });
+  // Clear conflicting CacheStorage caches
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      for (const name of names) {
+        if (name.includes('sonic-fitness') || name.includes('v15')) {
+          console.warn('[SW Killer] Deleting zombie cache:', name);
+          caches.delete(name);
+        }
+      }
+    });
+  }
+}
+
 async function hashString(str) {
   if (!str) return "";
   const buf = new TextEncoder().encode(str);
