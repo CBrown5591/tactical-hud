@@ -1,12 +1,10 @@
-// --- js/score.js: Pure Cloud Ledger, Ring Economy, Business Hours & Super Sonic Engine ---
+// --- js/score.js: Pure Cloud Ledger, Ring Economy & Super Sonic Engine (O(1) Optimized) ---
 
 function getTodayScoreDateStr() {
   const now = new Date();
   return now.toISOString().split("T")[0]; // "YYYY-MM-DD"
 }
 
-// In-memory runtime state for the score ledger.
-// Hydrated strictly from Trello's "📊 SCORE LEDGER" card.
 let activeCloudLedger = {
   currentDate: getTodayScoreDateStr(),
   today: {
@@ -43,7 +41,6 @@ let activeCloudLedger = {
   history: {}
 };
 
-// Purge all legacy local storage score caches across all devices to prevent zombie state
 function purgeLegacyLocalScoreCache() {
   try {
     const keysToRemove = [];
@@ -80,7 +77,6 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
   };
 }
 
-// Push directly to Trello card (The Singular Source of Truth)
 async function commitScoreLedgerToTrello(ledger = activeCloudLedger.today) {
   if (!state || !state.scoreLedgerCardId) return;
   if (typeof trelloFetch !== "function") return;
@@ -94,13 +90,11 @@ async function commitScoreLedgerToTrello(ledger = activeCloudLedger.today) {
   try {
     const payload = JSON.stringify(activeCloudLedger, null, 2);
     await trelloFetch(`/cards/${state.scoreLedgerCardId}`, "PUT", `&desc=${encodeURIComponent(payload)}`);
-    console.log("[Portal Master] Committed authoritative score ledger to Trello card:", activeCloudLedger);
   } catch (e) {
     console.error("[Portal Master] Failed to commit score ledger to Trello:", e);
   }
 }
 
-// Adopt cloud ledger from Trello card description into runtime memory
 function hydrateCloudLedgerFromTrello(cardDesc) {
   if (!cardDesc || !cardDesc.trim()) return;
   try {
@@ -112,15 +106,9 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
       if (!activeCloudLedger.inventory) {
         activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
       }
-      if (activeCloudLedger.ringBank === undefined) {
-        activeCloudLedger.ringBank = 0;
-      }
-      if (!Array.isArray(activeCloudLedger.customBoards)) {
-        activeCloudLedger.customBoards = [];
-      }
-      if (!activeCloudLedger.superState) {
-        activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
-      }
+      if (activeCloudLedger.ringBank === undefined) activeCloudLedger.ringBank = 0;
+      if (!Array.isArray(activeCloudLedger.customBoards)) activeCloudLedger.customBoards = [];
+      if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
 
       if (activeCloudLedger.currentDate !== todayStr) {
         if (!activeCloudLedger.history) activeCloudLedger.history = {};
@@ -139,26 +127,13 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
           dailyFreeWarpUsed: false
         };
       }
-    } else if (parsed.date) {
-      activeCloudLedger.currentDate = parsed.date;
-      activeCloudLedger.today = parsed;
-      if (!activeCloudLedger.history) activeCloudLedger.history = {};
-      activeCloudLedger.history[parsed.date] = parsed;
-      if (!activeCloudLedger.inventory) {
-        activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
-      }
-      if (activeCloudLedger.ringBank === undefined) activeCloudLedger.ringBank = 0;
-      if (!Array.isArray(activeCloudLedger.customBoards)) activeCloudLedger.customBoards = [];
-      if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
     }
-    console.log("[Portal Master] Hydrated score ledger directly from Trello:", activeCloudLedger);
     updateRingDisplay();
   } catch (e) {
     console.warn("[Portal Master] Failed to parse Trello score ledger card description:", e);
   }
 }
 
-// --- DYNAMIC BOARD SOURCE HELPERS (CLOUD PERSISTED) ---
 function getCustomBoards() {
   return (activeCloudLedger && Array.isArray(activeCloudLedger.customBoards)) ? activeCloudLedger.customBoards : [];
 }
@@ -178,7 +153,6 @@ function getActiveBoardsForContext(ctx) {
       { key: "growth", name: "Growth", icon: "🎓" }
     ]
   };
-
   const base = defaults[ctx] || [];
   const customs = getCustomBoards().filter(b => b.context === ctx);
   return [...base, ...customs];
@@ -186,25 +160,14 @@ function getActiveBoardsForContext(ctx) {
 
 async function addCustomBoard(name, rawIdOrUrl, context = "mission", icon = "🚀") {
   if (!name || !rawIdOrUrl) throw new Error("Name and Trello Board ID are required.");
-  
   let cleanId = rawIdOrUrl.trim();
   const urlMatch = cleanId.match(/trello\.com\/b\/([a-zA-Z0-9]+)/);
   if (urlMatch) cleanId = urlMatch[1];
 
   const key = `cb_${Date.now()}`;
   if (!activeCloudLedger.customBoards) activeCloudLedger.customBoards = [];
-
-  const newBoard = {
-    key,
-    name: name.trim(),
-    id: cleanId,
-    context,
-    icon: icon.trim() || "🚀"
-  };
-
-  activeCloudLedger.customBoards.push(newBoard);
+  activeCloudLedger.customBoards.push({ key, name: name.trim(), id: cleanId, context, icon: icon.trim() || "🚀" });
   await commitScoreLedgerToTrello(activeCloudLedger.today);
-  return newBoard;
 }
 
 async function removeCustomBoard(boardKey) {
@@ -213,7 +176,6 @@ async function removeCustomBoard(boardKey) {
   await commitScoreLedgerToTrello(activeCloudLedger.today);
 }
 
-// --- CLOUD-SYNCED ENERGY KEYWORD INFERENCE ENGINE ---
 const DEFAULT_ENERGY_KEYWORDS = {
   red: "architect, architecture, migration, migrate, deploy, deployment, outage, incident, sev-1, disaster, scada, infra, provision, rebuild, failover, security review",
   yellow: "configure, configuration, update, review, troubleshoot, investigate, test, testing, script, documentation, doc, prep, refactor, sync, analyze, analysis",
@@ -233,21 +195,13 @@ function getActiveEnergyKeywords() {
 
 async function updateCloudEnergyKeywords(newKeywords) {
   if (!activeCloudLedger) activeCloudLedger = { currentDate: getTodayScoreDateStr(), today: loadDailyScoreLedger() };
-  activeCloudLedger.energyKeywords = {
-    red: newKeywords.red || "",
-    yellow: newKeywords.yellow || "",
-    green: newKeywords.green || ""
-  };
+  activeCloudLedger.energyKeywords = { red: newKeywords.red || "", yellow: newKeywords.yellow || "", green: newKeywords.green || "" };
   await commitScoreLedgerToTrello(activeCloudLedger.today);
-  console.log("[Portal Master] Committed updated cloud energy keywords to Trello card:", activeCloudLedger.energyKeywords);
 }
 
 function buildKeywordRegex(csvString) {
   if (!csvString || !csvString.trim()) return null;
-  const terms = csvString.split(",")
-    .map(t => t.trim().toLowerCase())
-    .filter(t => t.length > 0)
-    .map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+  const terms = csvString.split(",").map(t => t.trim().toLowerCase()).filter(t => t.length > 0).map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
   if (terms.length === 0) return null;
   return new RegExp(`\\b(${terms.join("|")})\\b`, "i");
 }
@@ -255,7 +209,6 @@ function buildKeywordRegex(csvString) {
 function inferEnergyFromTitle(title = "") {
   if (!title) return "none";
   const clean = title.trim();
-
   if (/^(!red|!high|\[h\])\s+/i.test(clean)) return "red";
   if (/^(!yel|!med|\[m\])\s+/i.test(clean)) return "yellow";
   if (/^(!grn|!low|\[l\])\s+/i.test(clean)) return "green";
@@ -268,37 +221,42 @@ function inferEnergyFromTitle(title = "") {
   if (redRegex && redRegex.test(clean)) return "red";
   if (yellowRegex && yellowRegex.test(clean)) return "yellow";
   if (greenRegex && greenRegex.test(clean)) return "green";
-
   return "none";
 }
 
-// --- BUSINESS HOURS & RETROACTIVE WAIVER DEADLINE ENGINE ---
+// --- FREEZE-PROOF O(1) BUSINESS HOURS ENGINE ---
 function calculateBusinessHours(dStart, dEnd) {
+  if (!(dStart instanceof Date) || isNaN(dStart.getTime()) || !(dEnd instanceof Date) || isNaN(dEnd.getTime())) return 0;
   if (dStart > dEnd) return -calculateBusinessHours(dEnd, dStart);
-  let cur = new Date(dStart.getTime());
-  let totalHours = 0.0;
 
-  while (cur < dEnd) {
-    const nextHour = new Date(cur.getTime() + (60 * 60 * 1000));
-    nextHour.setMinutes(0, 0, 0);
-    const stepEnd = (dEnd < nextHour) ? dEnd : nextHour;
+  const SHIFT_START = 8.0;
+  const SHIFT_END = 17.0;
+  const MAX_SPAN_MS = 5 * 24 * 60 * 60 * 1000; // Cap lookback window to prevent any heavy iterations
+  
+  let start = (dEnd.getTime() - dStart.getTime() > MAX_SPAN_MS) ? new Date(dEnd.getTime() - MAX_SPAN_MS) : new Date(dStart.getTime());
+  let end = new Date(dEnd.getTime());
 
-    const day = cur.getDay();
-    // Monday (1) through Friday (5)
-    if (day >= 1 && day <= 5) {
-      const shiftStart = new Date(cur);
-      shiftStart.setHours(8, 0, 0, 0);
-      const shiftEnd = new Date(cur);
-      shiftEnd.setHours(17, 0, 0, 0);
+  let totalHours = 0;
+  let cur = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
 
-      const overlapStart = Math.max(cur.getTime(), shiftStart.getTime());
-      const overlapEnd = Math.min(stepEnd.getTime(), shiftEnd.getTime());
+  while (cur <= endDay) {
+    const dayOfWeek = cur.getDay();
+    if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+      let dayStart = SHIFT_START;
+      let dayEnd = SHIFT_END;
 
-      if (overlapEnd > overlapStart) {
-        totalHours += (overlapEnd - overlapStart) / (1000 * 60 * 60);
+      if (cur.getTime() === (new Date(start.getFullYear(), start.getMonth(), start.getDate())).getTime()) {
+        const startDec = start.getHours() + (start.getMinutes() / 60);
+        dayStart = Math.max(SHIFT_START, Math.min(SHIFT_END, startDec));
       }
+      if (cur.getTime() === endDay.getTime()) {
+        const endDec = end.getHours() + (end.getMinutes() / 60);
+        dayEnd = Math.max(SHIFT_START, Math.min(SHIFT_END, endDec));
+      }
+      if (dayEnd > dayStart) totalHours += (dayEnd - dayStart);
     }
-    cur = stepEnd;
+    cur.setDate(cur.getDate() + 1);
   }
   return +totalHours.toFixed(2);
 }
@@ -314,22 +272,17 @@ function calculateDeadlineModifier(energy = "green", dueStr = "", isRetroactiveW
   };
   const cfg = tierConfig[energy] || tierConfig.green;
 
-  // SUPER SONIC PERK or RETROACTIVE ON-TIME WAIVER: Always award full On-Target bonus
-  if (isSuperSonicActive() || isRetroactiveWaiver) {
-    return { 
-      type: "ontime", 
-      pts: cfg.ontime, 
-      label: isRetroactiveWaiver ? `🎯 On-Time Waiver (+${cfg.ontime})` : `⚡ Super On-Target (+${cfg.ontime})`,
-      isOverdue: false 
-    };
+  if ((typeof isSuperSonicActive === "function" && isSuperSonicActive()) || isRetroactiveWaiver) {
+    return { type: "ontime", pts: cfg.ontime, label: isRetroactiveWaiver ? `🎯 On-Time Waiver (+${cfg.ontime})` : `⚡ Super On-Target (+${cfg.ontime})`, isOverdue: false };
   }
 
   const now = new Date();
   const dueDate = new Date(dueStr);
+  if (isNaN(dueDate.getTime())) return { type: "none", pts: 0, label: "No Deadline", isOverdue: false };
+
   const isWork = (state && state.context === "work");
 
   if (isWork) {
-    // WORK HUD: Clamped strictly to business hours (Mon-Fri 8:00 AM - 5:00 PM)
     if (now <= dueDate) {
       const remainingBusHours = calculateBusinessHours(now, dueDate);
       if (remainingBusHours >= 9.0) {
@@ -339,18 +292,14 @@ function calculateDeadlineModifier(energy = "green", dueStr = "", isRetroactiveW
       }
     } else {
       const overdueBusHours = calculateBusinessHours(dueDate, now);
-
-      // Grace period: within 2.0 business hours after shift close
       if (overdueBusHours <= 2.0) {
         return { type: "ontime", pts: cfg.ontime, label: `🎯 On-Target Grace (+${cfg.ontime})`, isOverdue: false };
       }
-
       const businessDaysLate = Math.min(3, Math.ceil(overdueBusHours / 9.0));
       const penalty = -(businessDaysLate * cfg.penaltyPerDay);
       return { type: "overdue", pts: penalty, label: `⚠️ Overdue ${businessDaysLate}d (${penalty})`, isOverdue: true };
     }
   } else {
-    // PERSONAL / MISSION CONTROL: Calendar hours with 4h grace
     const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
     if (diffHours >= 24) {
       return { type: "early", pts: cfg.early, label: `⚡ Early (+${cfg.early})`, isOverdue: false };
@@ -373,17 +322,12 @@ async function recordCardCompleted(card, isRetroactiveWaiver = false) {
   ledger.completedCardIds.push(card.id);
 
   if (!ledger.completedBoards) ledger.completedBoards = [];
-  if (card.boardKey && !ledger.completedBoards.includes(card.boardKey)) {
-    ledger.completedBoards.push(card.boardKey);
-  }
+  if (card.boardKey && !ledger.completedBoards.includes(card.boardKey)) ledger.completedBoards.push(card.boardKey);
 
   const energy = card.energy || "none";
   let earnedBasePts = 0;
-  if (ledger.completed[energy] !== undefined) {
-    ledger.completed[energy]++;
-  } else {
-    ledger.completed.none++;
-  }
+  if (ledger.completed[energy] !== undefined) ledger.completed[energy]++;
+  else ledger.completed.none++;
 
   if (energy === "red") earnedBasePts = 100;
   else if (energy === "yellow") earnedBasePts = 50;
@@ -418,24 +362,15 @@ async function recordCardDeferred(card, isExempt = false, reason = "") {
   const isSuper = isSuperSonicActive();
   const hasShield = (activeCloudLedger.inventory && activeCloudLedger.inventory.roadblockShields > 0);
 
-  if (isSuper || isExempt) {
-    ledger.deferralsExempt = (ledger.deferralsExempt || 0) + 1;
-  } else if (hasShield) {
+  if (isSuper || isExempt) ledger.deferralsExempt = (ledger.deferralsExempt || 0) + 1;
+  else if (hasShield) {
     activeCloudLedger.inventory.roadblockShields--;
     ledger.deferralsExempt = (ledger.deferralsExempt || 0) + 1;
     reason = reason ? `${reason} (🛡️ Roadblock Shield Used)` : "🛡️ Roadblock Shield Used";
-  } else {
-    ledger.deferralsPenalized = (ledger.deferralsPenalized || 0) + 1;
-  }
+  } else ledger.deferralsPenalized = (ledger.deferralsPenalized || 0) + 1;
 
   if (!ledger.deferredCards) ledger.deferredCards = [];
-  ledger.deferredCards.push({
-    id: card.id,
-    name: card.name,
-    isExempt: isSuper || isExempt || hasShield,
-    reason,
-    time: new Date().toISOString()
-  });
+  ledger.deferredCards.push({ id: card.id, name: card.name, isExempt: isSuper || isExempt || hasShield, reason, time: new Date().toISOString() });
   await commitScoreLedgerToTrello(ledger);
 }
 
@@ -475,9 +410,7 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
       totalRunway = 0;
       netRunway = 0;
     } else {
-      meetingHours = (calTelemetry && calTelemetry.workBookedHours !== undefined)
-        ? calTelemetry.workBookedHours
-        : (calTelemetry && calTelemetry.bookedHours ? calTelemetry.bookedHours : 0);
+      meetingHours = (calTelemetry && calTelemetry.workBookedHours !== undefined) ? calTelemetry.workBookedHours : (calTelemetry && calTelemetry.bookedHours ? calTelemetry.bookedHours : 0);
       decompressionTax = +(Math.max(0, (meetingHours * 0.25) - decompBufferApplied)).toFixed(2);
       netRunway = Math.max(0.5, +(totalRunway - (meetingHours + decompressionTax)).toFixed(2));
     }
@@ -495,54 +428,15 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
 
   const yieldRate = netRunway > 0 ? +(rawScore / netRunway).toFixed(1) : 0;
 
-  let rank = "B";
-  let title = "STEADY CRUISE";
-  let rankColor = "#eab308";
+  let rank = "B", title = "STEADY CRUISE", rankColor = "#eab308";
+  if (rawScore === 0 && (isOff || meetingHours >= 7.0)) { rank = "S"; title = "CLEAN LOCKOUT"; rankColor = "#38bdf8"; }
+  else if (yieldRate >= 42.0) { rank = "S"; title = "SONIC MASTER"; rankColor = "#38bdf8"; }
+  else if (yieldRate >= 32.0) { rank = "A"; title = "OPERATIONAL ACE"; rankColor = "#22c55e"; }
+  else if (yieldRate >= 22.0) { rank = "B"; title = "STEADY CRUISE"; rankColor = "#eab308"; }
+  else if (yieldRate >= 12.0) { rank = "C"; title = "FRICTION DRAG"; rankColor = "#f97316"; }
+  else { rank = "D"; title = "CONTAINMENT"; rankColor = "#ef4444"; }
 
-  if (rawScore === 0 && (isOff || meetingHours >= 7.0)) {
-    rank = "S";
-    title = "CLEAN LOCKOUT";
-    rankColor = "#38bdf8";
-  } else if (yieldRate >= 42.0) {
-    rank = "S";
-    title = "SONIC MASTER";
-    rankColor = "#38bdf8";
-  } else if (yieldRate >= 32.0) {
-    rank = "A";
-    title = "OPERATIONAL ACE";
-    rankColor = "#22c55e";
-  } else if (yieldRate >= 22.0) {
-    rank = "B";
-    title = "STEADY CRUISE";
-    rankColor = "#eab308";
-  } else if (yieldRate >= 12.0) {
-    rank = "C";
-    title = "FRICTION DRAG";
-    rankColor = "#f97316";
-  } else {
-    rank = "D";
-    title = "CONTAINMENT";
-    rankColor = "#ef4444";
-  }
-
-  return {
-    rawScore,
-    redPts,
-    yellowPts,
-    greenPts,
-    deadlineNetPts,
-    dMods,
-    penaltyPts,
-    totalRunway,
-    meetingHours,
-    decompressionTax,
-    netRunway,
-    yieldRate,
-    rank,
-    title,
-    rankColor,
-    isOff
-  };
+  return { rawScore, redPts, yellowPts, greenPts, deadlineNetPts, dMods, penaltyPts, totalRunway, meetingHours, decompressionTax, netRunway, yieldRate, rank, title, rankColor, isOff };
 }
 
 function evaluateChaosEmeralds(weekStats) {
@@ -565,36 +459,24 @@ function evaluateChaosEmeralds(weekStats) {
   ];
 
   const collectedCount = emeralds.filter(e => e.unlocked).length;
-  const isSuperState = collectedCount === 7;
-
-  return { emeralds, collectedCount, isSuperState };
+  return { emeralds, collectedCount, isSuperState: collectedCount === 7 };
 }
 
 function getWeeklyRollingStats() {
   const now = new Date();
   const dayOfWeek = now.getDay();
   const monday = new Date(now);
-  const diff = now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
-  monday.setDate(diff);
+  monday.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
 
-  let totalScore = 0;
-  let totalNetRunway = 0;
-  let daysActive = 0;
-  let totalMeetings = 0;
-  let totalRed = 0, totalYellow = 0, totalGreen = 0;
-  let totalExempt = 0, totalPenalized = 0;
-  let totalChaosControl = 0;
-  let distinctBoardsSet = new Set();
-  let highMeetingDefense = false;
-  let weeklyEarly = 0, weeklyOntime = 0, weeklyOverdue = 0;
+  let totalScore = 0, totalNetRunway = 0, daysActive = 0, totalMeetings = 0;
+  let totalRed = 0, totalYellow = 0, totalGreen = 0, totalExempt = 0, totalPenalized = 0, totalChaosControl = 0;
+  let distinctBoardsSet = new Set(), weeklyEarly = 0, weeklyOntime = 0, weeklyOverdue = 0;
 
   for (let i = 0; i < 7; i++) {
     const cur = new Date(monday);
     cur.setDate(monday.getDate() + i);
     const dateStr = cur.toISOString().split("T")[0];
-    
-    const l = (activeCloudLedger.history && activeCloudLedger.history[dateStr]) || 
-              (activeCloudLedger.currentDate === dateStr ? activeCloudLedger.today : null);
+    const l = (activeCloudLedger.history && activeCloudLedger.history[dateStr]) || (activeCloudLedger.currentDate === dateStr ? activeCloudLedger.today : null);
 
     if (l) {
       const dm = l.deadlineModifiers || { earlyPts: 0, ontimePts: 0, overduePts: 0 };
@@ -627,34 +509,10 @@ function getWeeklyRollingStats() {
   else if (avgYield >= 22.0) grade = "CLASS B CRUISE";
   else grade = "CLASS C STABILIZATION";
 
-  const baseStats = {
-    totalScore,
-    daysActive,
-    totalMeetings,
-    totalRed,
-    totalYellow,
-    totalGreen,
-    weeklyEarly,
-    weeklyOntime,
-    weeklyOverdue,
-    totalExempt,
-    totalPenalized,
-    totalChaosControl,
-    distinctBoardsCount: distinctBoardsSet.size,
-    highMeetingDefense,
-    avgYield,
-    grade
-  };
-
-  const emeraldData = evaluateChaosEmeralds(baseStats);
-
-  return {
-    ...baseStats,
-    ...emeraldData
-  };
+  const baseStats = { totalScore, daysActive, totalMeetings, totalRed, totalYellow, totalGreen, weeklyEarly, weeklyOntime, weeklyOverdue, totalExempt, totalPenalized, totalChaosControl, distinctBoardsCount: distinctBoardsSet.size, highMeetingDefense: false, avgYield, grade };
+  return { ...baseStats, ...evaluateChaosEmeralds(baseStats) };
 }
 
-// --- SUPER SONIC & RING VAULT ENGINE ---
 function isSuperSonicActive() {
   return !!(activeCloudLedger && activeCloudLedger.superState && activeCloudLedger.superState.active);
 }
@@ -678,25 +536,16 @@ function updateRingDisplay() {
 
   const eligibleForSuper = canTransformSuperSonic();
   if (superBtn) {
-    if (isSuper) {
-      superBtn.classList.remove("hidden");
-      superBtn.textContent = "⚡ DEPOWER";
-    } else if (eligibleForSuper) {
-      superBtn.classList.remove("hidden");
-      superBtn.textContent = "⭐ GO SUPER";
-    } else {
-      superBtn.classList.add("hidden");
-    }
+    if (isSuper) { superBtn.classList.remove("hidden"); superBtn.textContent = "⚡ DEPOWER"; }
+    else if (eligibleForSuper) { superBtn.classList.remove("hidden"); superBtn.textContent = "⭐ GO SUPER"; }
+    else { superBtn.classList.add("hidden"); }
   }
-
   if (superPrompt) superPrompt.style.display = (isSuper || eligibleForSuper) ? "block" : "none";
   document.body.classList.toggle("super-sonic-active", isSuper);
 }
 
 function toggleSuperSonic() {
-  if (!activeCloudLedger.superState) {
-    activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
-  }
+  if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
   if (isSuperSonicActive()) {
     activeCloudLedger.superState.active = false;
     updateRingDisplay();
@@ -720,12 +569,10 @@ function processSuperSonicDrain() {
   const now = Date.now();
   const lastDrain = activeCloudLedger.superState.lastDrainAt || now;
   const elapsedSec = (now - lastDrain) / 1000;
-
   const ringsToDrain = Math.floor(elapsedSec / 6);
   if (ringsToDrain >= 1) {
     activeCloudLedger.ringBank = Math.max(0, (activeCloudLedger.ringBank || 0) - ringsToDrain);
     activeCloudLedger.superState.lastDrainAt = now - ((elapsedSec % 6) * 1000);
-
     if (activeCloudLedger.ringBank <= 0) {
       activeCloudLedger.ringBank = 0;
       activeCloudLedger.superState.active = false;
@@ -740,22 +587,11 @@ function processSuperSonicDrain() {
 }
 setInterval(processSuperSonicDrain, 1000);
 
-function openVaultModal() {
-  renderVaultInventory();
-  updateRingDisplay();
-  const m = document.getElementById("vaultModal");
-  if (m) m.classList.add("open");
-}
-
-function closeVaultModal() {
-  const m = document.getElementById("vaultModal");
-  if (m) m.classList.remove("open");
-}
+function openVaultModal() { renderVaultInventory(); updateRingDisplay(); document.getElementById("vaultModal")?.classList.add("open"); }
+function closeVaultModal() { document.getElementById("vaultModal")?.classList.remove("open"); }
 
 function renderVaultInventory() {
-  if (!activeCloudLedger.inventory) {
-    activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
-  }
+  if (!activeCloudLedger.inventory) activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
   const inv = activeCloudLedger.inventory;
   const setTxt = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   setTxt("vaultQtyWarp", inv.warpTokens || 0);
@@ -768,7 +604,7 @@ function renderVaultInventory() {
 function buyVaultItem(itemKey, cost) {
   const currentRings = (activeCloudLedger && activeCloudLedger.ringBank) || 0;
   if (currentRings < cost) {
-    alert(`Insufficient Rings! You need ${cost} rings (Current: ${currentRings}). Complete tasks to earn more!`);
+    alert(`Insufficient Rings! You need ${cost} rings (Current: ${currentRings}).`);
     return;
   }
   activeCloudLedger.ringBank -= cost;
@@ -780,13 +616,11 @@ function buyVaultItem(itemKey, cost) {
   if (typeof playPomoChime === "function") playPomoChime("chaos");
 }
 
-// --- MODALS & UI HANDLERS ---
 function openDebriefModal() {
   const ledger = loadDailyScoreLedger();
   const cal = state.calendarTelemetry || {};
   const stats = calculateTacticalYield(ledger, cal);
   const weekStats = getWeeklyRollingStats();
-
   const modal = document.getElementById("debriefModal");
   if (!modal) return;
 
@@ -795,10 +629,8 @@ function openDebriefModal() {
   document.getElementById("dbRankBadge").style.color = stats.rankColor;
   document.getElementById("dbRankTitle").textContent = `CLASS ${stats.rank} // ${stats.title}`;
   document.getElementById("dbRankTitle").style.color = stats.rankColor;
-
   document.getElementById("dbScoreDisplay").textContent = `${stats.rawScore} PTS`;
   document.getElementById("dbYieldDisplay").textContent = `${stats.yieldRate} PTS / FOCUS HR`;
-
   document.getElementById("dbRedCount").textContent = `${ledger.completed?.red || 0}`;
   document.getElementById("dbRedPts").textContent = `+${stats.redPts}`;
   document.getElementById("dbYellowCount").textContent = `${ledger.completed?.yellow || 0}`;
@@ -807,82 +639,56 @@ function openDebriefModal() {
   document.getElementById("dbGreenPts").textContent = `+${stats.greenPts}`;
 
   const dMods = stats.dMods || { earlyCount: 0, earlyPts: 0, ontimeCount: 0, ontimePts: 0, overdueCount: 0, overduePts: 0 };
-  const earlyEl = document.getElementById("dbEarlyCount");
-  if (earlyEl) earlyEl.textContent = `${dMods.earlyCount || 0}`;
-  const earlyPtsEl = document.getElementById("dbEarlyPts");
-  if (earlyPtsEl) earlyPtsEl.textContent = `+${dMods.earlyPts || 0}`;
-
-  const ontimeEl = document.getElementById("dbOntimeCount");
-  if (ontimeEl) ontimeEl.textContent = `${dMods.ontimeCount || 0}`;
-  const ontimePtsEl = document.getElementById("dbOntimePts");
-  if (ontimePtsEl) ontimePtsEl.textContent = `+${dMods.ontimePts || 0}`;
-
-  const overdueEl = document.getElementById("dbOverdueCount");
-  if (overdueEl) overdueEl.textContent = `${dMods.overdueCount || 0}`;
-  const overduePtsEl = document.getElementById("dbOverduePts");
-  if (overduePtsEl) overduePtsEl.textContent = dMods.overduePts < 0 ? `${dMods.overduePts}` : `0`;
+  document.getElementById("dbEarlyCount").textContent = `${dMods.earlyCount || 0}`;
+  document.getElementById("dbEarlyPts").textContent = `+${dMods.earlyPts || 0}`;
+  document.getElementById("dbOntimeCount").textContent = `${dMods.ontimeCount || 0}`;
+  document.getElementById("dbOntimePts").textContent = `+${dMods.ontimePts || 0}`;
+  document.getElementById("dbOverdueCount").textContent = `${dMods.overdueCount || 0}`;
+  document.getElementById("dbOverduePts").textContent = dMods.overduePts < 0 ? `${dMods.overduePts}` : `0`;
 
   document.getElementById("dbExemptCount").textContent = `${ledger.deferralsExempt || 0}`;
   document.getElementById("dbPenalizedCount").textContent = `${ledger.deferralsPenalized || 0}`;
   document.getElementById("dbPenaltyPts").textContent = stats.penaltyPts > 0 ? `-${stats.penaltyPts}` : `0`;
-
   document.getElementById("dbRunwayBase").textContent = `${stats.totalRunway.toFixed(2)}h`;
   document.getElementById("dbMeetingsBooked").textContent = `-${stats.meetingHours.toFixed(2)}h`;
   document.getElementById("dbDecompTax").textContent = `-${stats.decompressionTax.toFixed(2)}h`;
   document.getElementById("dbNetRunway").textContent = `${stats.netRunway.toFixed(2)}h`;
 
-  const barPercent = Math.min(100, Math.round((stats.yieldRate / 50) * 100));
   const barEl = document.getElementById("dbYieldBar");
   if (barEl) {
-    barEl.style.width = `${barPercent}%`;
+    barEl.style.width = `${Math.min(100, Math.round((stats.yieldRate / 50) * 100))}%`;
     barEl.style.backgroundColor = stats.rankColor;
   }
-
   renderEmeraldStrip("dbEmeraldStrip", weekStats);
   modal.classList.add("open");
 }
 
-function closeDebriefModal() {
-  const modal = document.getElementById("debriefModal");
-  if (modal) modal.classList.remove("open");
-}
+function closeDebriefModal() { document.getElementById("debriefModal")?.classList.remove("open"); }
 
 function renderEmeraldStrip(containerId, weekStats) {
   const container = document.getElementById(containerId);
   if (!container || !weekStats || !weekStats.emeralds) return;
-
-  container.innerHTML = weekStats.emeralds.map(em => {
-    const opacity = em.unlocked ? "1" : "0.22";
-    const filter = em.unlocked ? "drop-shadow(0 0 6px currentColor)" : "grayscale(100%)";
-    return `
-      <div style="display:flex; flex-direction:column; align-items:center; opacity:${opacity}; filter:${filter};" title="${em.name}: ${em.criteria} (${em.unlocked ? 'CLAIMED' : 'LOCKED'})">
-        <span style="font-size:1.4rem;">${em.icon}</span>
-        <span style="font-size:0.58rem; font-weight:700; margin-top:2px; color:#cbd5e1;">${em.unlocked ? '✓' : '—'}</span>
-      </div>
-    `;
-  }).join("");
-
+  container.innerHTML = weekStats.emeralds.map(em => `
+    <div style="display:flex; flex-direction:column; align-items:center; opacity:${em.unlocked ? "1" : "0.22"}; filter:${em.unlocked ? "drop-shadow(0 0 6px currentColor)" : "grayscale(100%)"};">
+      <span style="font-size:1.4rem;">${em.icon}</span>
+      <span style="font-size:0.58rem; font-weight:700; margin-top:2px; color:#cbd5e1;">${em.unlocked ? '✓' : '—'}</span>
+    </div>
+  `).join("");
   const superBanner = document.getElementById("dbSuperStateBanner");
-  if (superBanner) {
-    superBanner.style.display = weekStats.isSuperState ? "block" : "none";
-  }
+  if (superBanner) superBanner.style.display = weekStats.isSuperState ? "block" : "none";
 }
 
 function promptRoadblockDeferral(cardId, boardKey) {
   const card = state.allLoadedCards.find(c => c.id === cardId);
-  const cardTitle = card ? card.name : "this task";
-
-  document.getElementById("deferralModalCardName").textContent = cardTitle;
+  document.getElementById("deferralModalCardName").textContent = card ? card.name : "this task";
   document.getElementById("deferralReasonInput").value = "";
-  document.getElementById("deferralModal").dataset.cardId = cardId;
-  document.getElementById("deferralModal").dataset.boardKey = boardKey;
-  document.getElementById("deferralModal").classList.add("open");
-  setTimeout(() => document.getElementById("deferralReasonInput").focus(), 100);
+  const modal = document.getElementById("deferralModal");
+  modal.dataset.cardId = cardId;
+  modal.dataset.boardKey = boardKey;
+  modal.classList.add("open");
 }
 
-function closeDeferralModal() {
-  document.getElementById("deferralModal").classList.remove("open");
-}
+function closeDeferralModal() { document.getElementById("deferralModal")?.classList.remove("open"); }
 
 async function confirmDeferral(isDocumented) {
   const modal = document.getElementById("deferralModal");
@@ -892,51 +698,20 @@ async function confirmDeferral(isDocumented) {
   closeDeferralModal();
 
   const card = state.allLoadedCards.find(c => c.id === cardId);
-
   if (isDocumented) {
     if (!reason) reason = "Documented Roadblock";
-    try {
-      const commentText = `🛑 ROADBLOCK DEFERRED: ${reason}`;
-      await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent(commentText)}`);
-    } catch (e) {
-      console.error("Could not post roadblock comment:", e);
-    }
+    try { await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent("🛑 ROADBLOCK DEFERRED: " + reason)}`); } catch (e) {}
     await recordCardDeferred(card, true, reason);
   } else {
     await recordCardDeferred(card, false, "Undocumented");
   }
-
   await moveCard(cardId, boardKey, 'waiting');
 }
 
 async function requestPushNotificationPermission() {
-  if (!("Notification" in window)) {
-    alert("Push Notifications are not supported in this browser.");
-    return false;
-  }
+  if (!("Notification" in window)) return false;
   if (Notification.permission === "granted") return true;
-  const perm = await Notification.requestPermission();
-  return perm === "granted";
-}
-
-function sendPushTelemetryNotification(title, body, tag = "hud-telemetry") {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
-  try {
-    const notif = new Notification(title, {
-      body,
-      icon: "icon-192.png",
-      tag,
-      badge: "icon-192.png",
-      renotify: true
-    });
-    notif.onclick = () => {
-      window.focus();
-      if (tag === "hud-eow") openWeeklyReportModal();
-      else openDebriefModal();
-    };
-  } catch (e) {
-    console.error("Failed to display notification:", e);
-  }
+  return (await Notification.requestPermission()) === "granted";
 }
 
 function checkAndSchedulePushNotifications() {
@@ -949,28 +724,9 @@ function checkAndSchedulePushNotifications() {
   if (day >= 1 && day <= 5 && hour >= 16.75 && hour < 18.0) {
     const key = "HUD_NOTIFIED_EOD_" + todayStr;
     if (!localStorage.getItem(key)) {
-      const stats = calculateTacticalYield();
-      sendPushTelemetryNotification(
-        "⚡ Tactical Focus HUD: Shift Concluded",
-        `Today's Yield: ${stats.yieldRate} pts/hr (${stats.rank} Rank). Tap to open EOD Debrief.`,
-        "hud-eod"
-      );
-      localStorage.setItem(key, "true");
-    }
-  }
-
-  if (day === 5 && hour >= 16.75 && hour < 18.0) {
-    const key = "HUD_NOTIFIED_EOW_" + todayStr;
-    if (!localStorage.getItem(key)) {
-      const weekStats = getWeeklyRollingStats();
-      sendPushTelemetryNotification(
-        `⭐ Weekly Cycle Complete: ${weekStats.collectedCount}/7 Emeralds`,
-        `Weekly Grade: ${weekStats.grade}. Tap to review your Weekly Executive Briefing.`,
-        "hud-eow"
-      );
+      new Notification("⚡ Shift Concluded", { body: `Today's Yield: ${calculateTacticalYield().yieldRate} pts/hr.` });
       localStorage.setItem(key, "true");
     }
   }
 }
-
 setInterval(checkAndSchedulePushNotifications, 5 * 60 * 1000);
