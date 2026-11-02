@@ -1,4 +1,4 @@
-// --- js/score.js: Pure Cloud Ledger, Ring Economy & Super Sonic Engine (Zero Local Storage) ---
+// --- js/score.js: Pure Cloud Ledger, Ring Economy, Custom Boards & Super Sonic Engine ---
 
 function getTodayScoreDateStr() {
   const now = new Date();
@@ -22,7 +22,7 @@ let activeCloudLedger = {
     dailyFreeWarpUsed: false
   },
   ringBank: 0,
-  customBoards: [],
+  customBoards: [], // Dynamic boards stored directly on Trello
   inventory: {
     warpTokens: 0,
     roadblockShields: 0,
@@ -122,7 +122,7 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
         activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
       }
 
-      // If it's a new day, rollover today and reset daily free warp
+      // Rollover on day change
       if (activeCloudLedger.currentDate !== todayStr) {
         if (!activeCloudLedger.history) activeCloudLedger.history = {};
         activeCloudLedger.history[activeCloudLedger.currentDate] = activeCloudLedger.today;
@@ -141,7 +141,6 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
         };
       }
     } else if (parsed.date) {
-      // Legacy flat ledger fallback
       activeCloudLedger.currentDate = parsed.date;
       activeCloudLedger.today = parsed;
       if (!activeCloudLedger.history) activeCloudLedger.history = {};
@@ -150,6 +149,7 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
         activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
       }
       if (activeCloudLedger.ringBank === undefined) activeCloudLedger.ringBank = 0;
+      if (!Array.isArray(activeCloudLedger.customBoards)) activeCloudLedger.customBoards = [];
       if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
     }
     console.log("[Portal Master] Hydrated score ledger directly from Trello:", activeCloudLedger);
@@ -257,7 +257,6 @@ function inferEnergyFromTitle(title = "") {
   if (!title) return "none";
   const clean = title.trim();
 
-  // 1. Shorthand Override Check (!red, [H], !yel, etc.)
   if (/^(!red|!high|\[h\])\s+/i.test(clean)) return "red";
   if (/^(!yel|!med|\[m\])\s+/i.test(clean)) return "yellow";
   if (/^(!grn|!low|\[l\])\s+/i.test(clean)) return "green";
@@ -267,7 +266,6 @@ function inferEnergyFromTitle(title = "") {
   const yellowRegex = buildKeywordRegex(kw.yellow);
   const greenRegex = buildKeywordRegex(kw.green);
 
-  // Highest Voltage Priority
   if (redRegex && redRegex.test(clean)) return "red";
   if (yellowRegex && yellowRegex.test(clean)) return "yellow";
   if (greenRegex && greenRegex.test(clean)) return "green";
@@ -279,7 +277,6 @@ function inferEnergyFromTitle(title = "") {
 function calculateDeadlineModifier(energy = "green", dueStr = "") {
   if (!dueStr) return { type: "none", pts: 0, label: "No Deadline" };
 
-  // SUPER SONIC PERK: Automatic max On-Target bonus regardless of timestamp
   if (isSuperSonicActive()) {
     const tierOnTarget = { red: 25, yellow: 15, green: 10, none: 5 };
     const pts = tierOnTarget[energy] || 10;
@@ -362,7 +359,6 @@ async function recordCardDeferred(card, isExempt = false, reason = "") {
   if (!card || !card.id) return;
   const ledger = loadDailyScoreLedger();
 
-  // SUPER SONIC PERK or ROADBLOCK SHIELD: 100% Tax Waiver
   const isSuper = isSuperSonicActive();
   const hasShield = (activeCloudLedger.inventory && activeCloudLedger.inventory.roadblockShields > 0);
 
@@ -415,9 +411,7 @@ function calculateTacticalYield(ledger = loadDailyScoreLedger(), calTelemetry = 
   let decompressionTax = 0;
   let netRunway = 9.0;
 
-  // Decompression buffer inventory allowance (+0.5h breathing room)
   const decompBufferApplied = (activeCloudLedger.inventory && activeCloudLedger.inventory.decompBuffers > 0) ? 0.5 : 0;
-
   const isMission = state && state.context === "mission";
 
   if (isWork) {
@@ -671,7 +665,6 @@ function processSuperSonicDrain() {
   const lastDrain = activeCloudLedger.superState.lastDrainAt || now;
   const elapsedSec = (now - lastDrain) / 1000;
 
-  // Drain 1 ring every 6 seconds (10 rings / min)
   const ringsToDrain = Math.floor(elapsedSec / 6);
   if (ringsToDrain >= 1) {
     activeCloudLedger.ringBank = Math.max(0, (activeCloudLedger.ringBank || 0) - ringsToDrain);
