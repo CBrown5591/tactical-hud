@@ -1,6 +1,6 @@
 // --- js/app.js: Application Core, State, Routing & UI Renderers ---
 
-const STORAGE_KEY = "TACTICAL_HUD_CFG_V2";
+var STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
 const BOARD_LABELS = {
   work: "💼 Work",
   life: "🎢 King's Dominion",
