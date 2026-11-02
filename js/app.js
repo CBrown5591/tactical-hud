@@ -9,7 +9,16 @@ var BOARD_LABELS = window.BOARD_LABELS || {
   growth: "🎓 Growth"
 };
 
-let state = {
+var STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
+var BOARD_LABELS = window.BOARD_LABELS || {
+  work: "💼 Work",
+  life: "🎢 King's Dominion",
+  vi: "🏝️ By The VI",
+  lab: "⚡ Hiiii-Power",
+  growth: "🎓 Growth"
+};
+
+var state = window.state || {
   context: "work",
   manualOverride: false,
   energyFilter: "all",
