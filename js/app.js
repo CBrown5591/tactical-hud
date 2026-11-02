@@ -473,6 +473,7 @@ async function syncHud() {
     }
 
     results.forEach(({ boardKey, listMap, cards }) => {
+      const cache = state.boardCache[boardKey];
       cards.forEach(card => {
         if (card.name.startsWith("🎯 SAVE STATE")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
