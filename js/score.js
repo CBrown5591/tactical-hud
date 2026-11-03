@@ -41,6 +41,62 @@ let activeCloudLedger = {
   history: {}
 };
 
+// --- DYNAMIC BOARD SOURCE HELPERS ---
+function getCustomBoards() {
+  return (activeCloudLedger && Array.isArray(activeCloudLedger.customBoards)) ? activeCloudLedger.customBoards : [];
+}
+
+function getActiveBoardsForContext(ctx = (state && state.context) ? state.context : "work") {
+  const defaults = {
+    work: [
+      { key: "work", name: "Work", icon: "💼" },
+      { key: "growth", name: "Growth", icon: "🎓" }
+    ],
+    personal: [
+      { key: "life", name: "King's Dominion", icon: "🎢" },
+      { key: "growth", name: "Growth", icon: "🎓" }
+    ],
+    mission: [
+      { key: "vi", name: "By The VI", icon: "🏝️" },
+      { key: "lab", name: "Hiiii-Power", icon: "🔬" },
+      { key: "growth", name: "Growth", icon: "🎓" }
+    ]
+  };
+
+  const base = defaults[ctx] || defaults.work;
+  const customs = getCustomBoards().filter(b => b.context === ctx);
+  return [...base, ...customs];
+}
+
+async function addCustomBoard(name, rawIdOrUrl, context = "mission", icon = "🚀") {
+  if (!name || !rawIdOrUrl) throw new Error("Name and Trello Board ID are required.");
+  
+  let cleanId = rawIdOrUrl.trim();
+  const urlMatch = cleanId.match(/trello\.com\/b\/([a-zA-Z0-9]+)/);
+  if (urlMatch) cleanId = urlMatch[1];
+
+  const key = `cb_${Date.now()}`;
+  if (!activeCloudLedger.customBoards) activeCloudLedger.customBoards = [];
+
+  const newBoard = {
+    key,
+    name: name.trim(),
+    id: cleanId,
+    context,
+    icon: icon.trim() || "🚀"
+  };
+
+  activeCloudLedger.customBoards.push(newBoard);
+  await commitScoreLedgerToTrello(activeCloudLedger.today);
+  return newBoard;
+}
+
+async function removeCustomBoard(boardKey) {
+  if (!activeCloudLedger.customBoards) return;
+  activeCloudLedger.customBoards = activeCloudLedger.customBoards.filter(b => b.key !== boardKey);
+  await commitScoreLedgerToTrello(activeCloudLedger.today);
+}
+
 // Purge legacy local storage score caches across all devices to prevent zombie state
 function purgeLegacyLocalScoreCache() {
   try {
