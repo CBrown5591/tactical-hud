@@ -418,15 +418,38 @@ async function syncHud() {
 
   state.energyQuotas = calculateEnergyQuotas(calData);
 
+  // Ingest custom boards if available
   const customBoards = typeof getCustomBoards === "function" ? getCustomBoards() : [];
   customBoards.forEach(b => {
     cfg.boards[b.key] = b.id;
     BOARD_LABELS[b.key] = `${b.icon || '🚀'} ${b.name}`;
   });
 
-  const activeBoards = typeof getActiveBoardsForContext === "function"
-    ? getActiveBoardsForContext(state.context)
-    : [];
+  // Resolve active boards with resilient fallback
+  let activeBoards = [];
+  if (typeof getActiveBoardsForContext === "function") {
+    activeBoards = getActiveBoardsForContext(state.context);
+  }
+  
+  if (!activeBoards || activeBoards.length === 0) {
+    if (state.context === "work") {
+      activeBoards = [
+        { key: "work", name: "Work", icon: "💼" },
+        { key: "growth", name: "Growth", icon: "🎓" }
+      ];
+    } else if (state.context === "mission") {
+      activeBoards = [
+        { key: "vi", name: "By The VI", icon: "🏝️" },
+        { key: "lab", name: "Hiiii-Power", icon: "🔬" }
+      ];
+    } else {
+      activeBoards = [
+        { key: "life", name: "King's Dominion", icon: "🎢" },
+        { key: "growth", name: "Growth", icon: "🎓" }
+      ];
+    }
+  }
+
   const activeKeys = activeBoards.map(b => b.key);
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
@@ -474,7 +497,8 @@ async function syncHud() {
         if (card.name.startsWith("🎯 SAVE STATE")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
             state.saveStateCardId = card.id;
-            document.getElementById("saveStateInput").value = card.desc || "";
+            const inputEl = document.getElementById("saveStateInput");
+            if (inputEl) inputEl.value = card.desc || "";
           }
           return;
         }
@@ -512,6 +536,7 @@ async function syncHud() {
             }
           }
         }
+        
         const commentsList = (card.actions && Array.isArray(card.actions))
           ? card.actions.filter(a => a.type === "commentCard" && a.data && a.data.text).map(a => ({
               id: a.id,
@@ -558,7 +583,6 @@ async function syncHud() {
       });
     });
 
-    // --- AUTO-SPAWN MISSING CONTEXT LEDGER ---
     // --- AUTO-SPAWN MISSING CONTEXT LEDGER (SAFE) ---
     if (!state.scoreLedgerCardId) {
       try {
@@ -580,6 +604,7 @@ async function syncHud() {
             );
             if (newLedgerCard && newLedgerCard.id) {
               state.scoreLedgerCardId = newLedgerCard.id;
+              console.log(`[Score Sync] Auto-created ${cardTitle} on ${primaryRes.boardKey}:`, newLedgerCard.id);
             }
           }
         }
