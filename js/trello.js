@@ -294,3 +294,25 @@ function emailWeeklyReport() {
   const dateStr = new Date().toISOString().split("T")[0];
   window.location.href = `mailto:${recipient}?subject=${encodeURIComponent(`Weekly Tactical Executive Scorecard - ${dateStr}`)}&body=${encodeURIComponent(report)}`;
 }
+async function commitScoreLedgerToTrello(ledger = activeCloudLedger.today) {
+  if (!state || !state.scoreLedgerCardId) {
+    console.warn("[Portal Master] Cannot commit ledger: scoreLedgerCardId is null. Skipping sync.");
+    return;
+  }
+  if (typeof trelloFetch !== "function") return;
+
+  const todayStr = getTodayScoreDateStr();
+  activeCloudLedger.currentDate = todayStr;
+  activeCloudLedger.today = ledger;
+  if (!activeCloudLedger.history) activeCloudLedger.history = {};
+  activeCloudLedger.history[todayStr] = ledger;
+
+  try {
+    const payload = JSON.stringify(activeCloudLedger, null, 2);
+    // Send desc in JSON body instead of URL query string
+    await trelloFetch(`/cards/${state.scoreLedgerCardId}`, "PUT", "", { desc: payload });
+    console.log("[Portal Master] Committed authoritative score ledger to Trello card.");
+  } catch (e) {
+    console.error("[Portal Master] Failed to commit score ledger to Trello:", e);
+  }
+}
