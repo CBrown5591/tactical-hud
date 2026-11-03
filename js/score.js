@@ -2,7 +2,10 @@
 
 function getTodayScoreDateStr() {
   const now = new Date();
-  return now.toISOString().split("T")[0]; // "YYYY-MM-DD"
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`; // Uses Local browser time (e.g., 2026-11-02)
 }
 
 // In-memory runtime state for the score ledger.
@@ -83,7 +86,7 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
     const parsed = JSON.parse(cardDesc.trim());
     const todayStr = getTodayScoreDateStr();
 
-    // Preserve universal economy across context switches
+    // Universal economy preservation
     const universalRings = Math.max(activeCloudLedger.ringBank || 0, parsed.ringBank || 0);
     const universalInventory = {
       warpTokens: Math.max(activeCloudLedger.inventory?.warpTokens || 0, parsed.inventory?.warpTokens || 0),
@@ -93,12 +96,12 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
       spikePasses: Math.max(activeCloudLedger.inventory?.spikePasses || 0, parsed.inventory?.spikePasses || 0)
     };
 
-    if (parsed.today && parsed.currentDate) {
+    if (parsed.today) {
       activeCloudLedger = parsed;
-      // Rollover check if it's a new calendar day
-      if (activeCloudLedger.currentDate !== todayStr) {
+      // If the incoming card matches today's local date, keep its today object intact
+      if (parsed.today.date !== todayStr && parsed.currentDate !== todayStr) {
         if (!activeCloudLedger.history) activeCloudLedger.history = {};
-        activeCloudLedger.history[activeCloudLedger.currentDate] = activeCloudLedger.today;
+        if (parsed.today.date) activeCloudLedger.history[parsed.today.date] = parsed.today;
         activeCloudLedger.currentDate = todayStr;
         activeCloudLedger.today = {
           date: todayStr,
@@ -118,11 +121,10 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
       activeCloudLedger.today = parsed;
     }
 
-    // Lock in universal Ring Bank and Inventory
     activeCloudLedger.ringBank = universalRings;
     activeCloudLedger.inventory = universalInventory;
 
-    console.log(`[Score Sync] Hydrated ${state?.context?.toUpperCase() || "HUD"} score ledger from Trello:`, activeCloudLedger);
+    console.log(`[Score Sync] Hydrated ${state?.context?.toUpperCase() || "HUD"} score ledger:`, activeCloudLedger);
     updateRingDisplay();
   } catch (e) {
     console.warn("[Score Sync] Failed to parse Trello score ledger card description:", e);
