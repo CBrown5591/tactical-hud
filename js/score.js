@@ -5,7 +5,7 @@ function getTodayScoreDateStr() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`; // Evaluates to local YYYY-MM-DD
+  return `${year}-${month}-${day}`;
 }
 
 // In-memory runtime state for the score ledger.
@@ -79,7 +79,7 @@ function loadDailyScoreLedger(dateStr = getTodayScoreDateStr()) {
   };
 }
 
-// --- CONTEXT-AWARE CLOUD HYDRATION WITH UNIVERSAL ECONOMY ---
+// --- CONTEXT-AWARE CLOUD HYDRATION WITH UNIVERSAL ECONOMY & LOCAL DATE RESILIENCE ---
 function hydrateCloudLedgerFromTrello(cardDesc) {
   if (!cardDesc || !cardDesc.trim()) return;
   try {
@@ -130,7 +130,7 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
     activeCloudLedger.ringBank = universalRings;
     activeCloudLedger.inventory = universalInventory;
 
-    console.log(`[Score Sync] Hydrated ${state?.context?.toUpperCase() || "HUD"} score ledger from Trello:`, activeCloudLedger);
+    console.log(`[Score Sync] Hydrated ${state?.context?.toUpperCase() || "HUD"} score ledger:`, activeCloudLedger);
     updateRingDisplay();
   } catch (e) {
     console.warn("[Score Sync] Failed to parse Trello score ledger card description:", e);
@@ -406,7 +406,10 @@ function getWeeklyRollingStats() {
   for (let i = 0; i < 7; i++) {
     const cur = new Date(monday);
     cur.setDate(monday.getDate() + i);
-    const dateStr = cur.toISOString().split("T")[0];
+    const year = cur.getFullYear();
+    const month = String(cur.getMonth() + 1).padStart(2, '0');
+    const day = String(cur.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
     
     const l = (activeCloudLedger.history && activeCloudLedger.history[dateStr]) || 
               (activeCloudLedger.currentDate === dateStr ? activeCloudLedger.today : null);
@@ -700,7 +703,8 @@ function promptRoadblockDeferral(cardId, boardKey) {
 }
 
 function closeDeferralModal() {
-  document.getElementById("deferralModal").classList.remove("open");
+  const modal = document.getElementById("deferralModal");
+  if (modal) modal.classList.remove("open");
 }
 
 async function confirmDeferral(isDocumented) {
