@@ -5,7 +5,7 @@ function getTodayScoreDateStr() {
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, '0');
   const day = String(now.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`; // Uses Local browser time (e.g., 2026-11-02)
+  return `${year}-${month}-${day}`; // Evaluates to local YYYY-MM-DD
 }
 
 // In-memory runtime state for the score ledger.
