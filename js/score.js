@@ -101,15 +101,19 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
     const parsed = JSON.parse(cardDesc.trim());
     const todayStr = getTodayScoreDateStr();
 
+    // Preserve universal bank if existing in memory is higher/newer
+    const universalRings = Math.max(activeCloudLedger.ringBank || 0, parsed.ringBank || 0);
+    const universalInventory = {
+      warpTokens: Math.max(activeCloudLedger.inventory?.warpTokens || 0, parsed.inventory?.warpTokens || 0),
+      roadblockShields: Math.max(activeCloudLedger.inventory?.roadblockShields || 0, parsed.inventory?.roadblockShields || 0),
+      deadlineExtenders: Math.max(activeCloudLedger.inventory?.deadlineExtenders || 0, parsed.inventory?.deadlineExtenders || 0),
+      decompBuffers: Math.max(activeCloudLedger.inventory?.decompBuffers || 0, parsed.inventory?.decompBuffers || 0),
+      spikePasses: Math.max(activeCloudLedger.inventory?.spikePasses || 0, parsed.inventory?.spikePasses || 0)
+    };
+
     if (parsed.today && parsed.currentDate) {
       activeCloudLedger = parsed;
-      if (!activeCloudLedger.inventory) {
-        activeCloudLedger.inventory = { warpTokens: 0, roadblockShields: 0, deadlineExtenders: 0, decompBuffers: 0, spikePasses: 0 };
-      }
-      if (activeCloudLedger.ringBank === undefined) activeCloudLedger.ringBank = 0;
-      if (!Array.isArray(activeCloudLedger.customBoards)) activeCloudLedger.customBoards = [];
-      if (!activeCloudLedger.superState) activeCloudLedger.superState = { active: false, startedAt: null, lastDrainAt: null };
-
+      // Rollover check if it's a new day
       if (activeCloudLedger.currentDate !== todayStr) {
         if (!activeCloudLedger.history) activeCloudLedger.history = {};
         activeCloudLedger.history[activeCloudLedger.currentDate] = activeCloudLedger.today;
@@ -127,13 +131,21 @@ function hydrateCloudLedgerFromTrello(cardDesc) {
           dailyFreeWarpUsed: false
         };
       }
+    } else if (parsed.date) {
+      activeCloudLedger.currentDate = parsed.date;
+      activeCloudLedger.today = parsed;
     }
-    updateRingDisplay();
+
+    // Apply universal economy
+    activeCloudLedger.ringBank = universalRings;
+    activeCloudLedger.inventory = universalInventory;
+
+    console.log(`[Score Sync] Hydrated ${state.context.toUpperCase()} score ledger from Trello:`, activeCloudLedger);
+    if (typeof updateRingDisplay === "function") updateRingDisplay();
   } catch (e) {
-    console.warn("[Portal Master] Failed to parse Trello score ledger card description:", e);
+    console.warn("[Score Sync] Failed to parse Trello score ledger card description:", e);
   }
 }
-
 function getCustomBoards() {
   return (activeCloudLedger && Array.isArray(activeCloudLedger.customBoards)) ? activeCloudLedger.customBoards : [];
 }
