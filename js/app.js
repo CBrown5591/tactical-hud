@@ -469,7 +469,7 @@ async function syncHud() {
     }
 
     results.forEach(({ boardKey, listMap, cards }) => {
-      const cache = state.boardCache[boardKey]; // Fixed cache reference
+      const cache = state.boardCache[boardKey];
       cards.forEach(card => {
         if (card.name.startsWith("🎯 SAVE STATE")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
@@ -478,15 +478,27 @@ async function syncHud() {
           }
           return;
         }
-        if (card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("⚡ SCORE LEDGER")) {
-          if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
+
+        // --- CONTEXT-SCOPED CLOUD LEDGER DETECTION ---
+        const targetLedgerName = `SCORE LEDGER (${state.context.toUpperCase()})`;
+        const isGenericLedger = card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("⚡ SCORE LEDGER");
+        const isScopedLedger = card.name.toUpperCase().includes(targetLedgerName);
+
+        if (isScopedLedger || (isGenericLedger && !state.scoreLedgerCardId)) {
+          const isContextOwner = 
+            (state.context === "work" && boardKey === "work") ||
+            (state.context === "personal" && boardKey === "life") ||
+            (state.context === "mission" && (boardKey === "vi" || boardKey === "lab"));
+
+          if (isContextOwner) {
             state.scoreLedgerCardId = card.id;
             if (typeof hydrateCloudLedgerFromTrello === "function") {
               hydrateCloudLedgerFromTrello(card.desc || "");
             }
+            return;
           }
-          return;
         }
+
         let energyColor = "none";
         const matchedEnergyLabel = (card.labels || []).find(l => ["red", "yellow", "green"].includes(l.color));
         if (matchedEnergyLabel) {
@@ -521,7 +533,7 @@ async function syncHud() {
 
         const item = {
           id: card.id,
-          idList: card.idList, // <--- ADD THIS LINE
+          idList: card.idList,
           name: card.name,
           desc: card.desc || "",
           due: card.due || "",
@@ -546,17 +558,29 @@ async function syncHud() {
       });
     });
 
+    // --- AUTO-SPAWN MISSING CONTEXT LEDGER ---
     if (!state.scoreLedgerCardId) {
-      const primaryRes = results.find(r => (state.context === "work" && r.boardKey === "work") || (state.context === "personal" && r.boardKey === "life"));
+      const primaryRes = results.find(r => 
+        (state.context === "work" && r.boardKey === "work") || 
+        (state.context === "personal" && r.boardKey === "life") ||
+        (state.context === "mission" && (r.boardKey === "vi" || r.boardKey === "lab"))
+      );
       if (primaryRes && primaryRes.listMap) {
         const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
         if (targetList) {
           try {
+            const cardTitle = `📊 SCORE LEDGER (${state.context.toUpperCase()})`;
             const initialPayload = JSON.stringify(activeCloudLedger, null, 2);
-            const newLedgerCard = await trelloFetch('/cards', 'POST', `&idList=${targetList}&name=${encodeURIComponent("📊 SCORE LEDGER")}&desc=${encodeURIComponent(initialPayload)}&pos=bottom`);
+            const newLedgerCard = await trelloFetch(
+              '/cards', 
+              'POST', 
+              `&idList=${targetList}&name=${encodeURIComponent(cardTitle)}&pos=bottom`,
+              { desc: initialPayload }
+            );
             state.scoreLedgerCardId = newLedgerCard.id;
+            console.log(`[Score Sync] Auto-created ${cardTitle} on ${primaryRes.boardKey}:`, newLedgerCard.id);
           } catch (e) {
-            console.warn("[Portal Master] Could not auto-create 📊 SCORE LEDGER card:", e);
+            console.warn("[Score Sync] Could not auto-create SCORE LEDGER card:", e);
           }
         }
       }
@@ -570,7 +594,6 @@ async function syncHud() {
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
   }
 }
-
 function renderCards() {
   const filterFn = c => state.energyFilter === "all" || c.energy === state.energyFilter;
   const todayFiltered = state.todayCards.filter(filterFn);
