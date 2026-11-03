@@ -1,11 +1,18 @@
 // --- js/trello.js: Trello API Wrapper & Communications ---
 
-async function trelloFetch(path, method = "GET", queryParams = "") {
+async function trelloFetch(path, method = "GET", queryParams = "", body = null) {
   const cfg = loadConfig();
   if (!cfg || !cfg.apiKey || !cfg.token) throw new Error("Missing credentials in ⚙️ Settings");
   const sep = path.includes("?") ? "&" : "?";
   const url = `https://api.trello.com/1${path}${sep}key=${cfg.apiKey}&token=${cfg.token}${queryParams}`;
-  const res = await fetch(url, { method });
+  
+  const options = { method };
+  if (body) {
+    options.headers = { "Content-Type": "application/json" };
+    options.body = JSON.stringify(body);
+  }
+
+  const res = await fetch(url, options);
   if (!res.ok) {
     let errBody = "";
     try { errBody = await res.text(); } catch (e) {}
