@@ -559,30 +559,32 @@ async function syncHud() {
     });
 
     // --- AUTO-SPAWN MISSING CONTEXT LEDGER ---
+    // --- AUTO-SPAWN MISSING CONTEXT LEDGER (SAFE) ---
     if (!state.scoreLedgerCardId) {
-      const primaryRes = results.find(r => 
-        (state.context === "work" && r.boardKey === "work") || 
-        (state.context === "personal" && r.boardKey === "life") ||
-        (state.context === "mission" && (r.boardKey === "vi" || r.boardKey === "lab"))
-      );
-      if (primaryRes && primaryRes.listMap) {
-        const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
-        if (targetList) {
-          try {
+      try {
+        const primaryRes = results.find(r => 
+          (state.context === "work" && r.boardKey === "work") || 
+          (state.context === "personal" && r.boardKey === "life") ||
+          (state.context === "mission" && (r.boardKey === "vi" || r.boardKey === "lab"))
+        );
+        if (primaryRes && primaryRes.listMap) {
+          const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
+          if (targetList) {
             const cardTitle = `📊 SCORE LEDGER (${state.context.toUpperCase()})`;
             const initialPayload = JSON.stringify(activeCloudLedger, null, 2);
             const newLedgerCard = await trelloFetch(
-              '/cards', 
-              'POST', 
-              `&idList=${targetList}&name=${encodeURIComponent(cardTitle)}&pos=bottom`,
+              `/cards?idList=${targetList}&name=${encodeURIComponent(cardTitle)}&pos=bottom`,
+              'POST',
+              '',
               { desc: initialPayload }
             );
-            state.scoreLedgerCardId = newLedgerCard.id;
-            console.log(`[Score Sync] Auto-created ${cardTitle} on ${primaryRes.boardKey}:`, newLedgerCard.id);
-          } catch (e) {
-            console.warn("[Score Sync] Could not auto-create SCORE LEDGER card:", e);
+            if (newLedgerCard && newLedgerCard.id) {
+              state.scoreLedgerCardId = newLedgerCard.id;
+            }
           }
         }
+      } catch (e) {
+        console.warn("[Score Sync] Non-blocking auto-create skipped:", e.message);
       }
     }
 
