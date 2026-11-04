@@ -167,21 +167,6 @@
 
   <!-- MAIN HUD PANELS -->
   <main class="hud-grid">
-    <!-- TBD / PARKING LOT COLLAPSIBLE SECTION -->
-  <section class="panel" style="margin-top: 14px;">
-    <div class="section-label" style="cursor: pointer; user-select: none;" onclick="toggleTbdDrawer()">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span id="tbdToggleChevron">▶</span>
-        <span>💡 TBD // DISCUSSION & PARKING LOT</span>
-      </div>
-      <span class="wip-counter" id="tbdCount">0</span>
-    </div>
-    <div id="tbdDrawer" style="display: none; margin-top: 10px;">
-      <div class="task-list" id="tbdList">
-        <div class="empty-state">No parked thoughts or discussion items.</div>
-      </div>
-    </div>
-  </section>
     
     <!-- TODAY'S LOAD -->
     <section class="panel">
@@ -202,6 +187,21 @@
     </section>
   </main>
 
+   <!-- TBD / PARKING LOT COLLAPSIBLE SECTION -->
+  <section class="panel" style="margin-top: 14px;">
+    <div class="section-label" style="cursor: pointer; user-select: none;" onclick="toggleTbdDrawer()">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="tbdToggleChevron">▶</span>
+        <span>💡 TBD // DISCUSSION & PARKING LOT</span>
+      </div>
+      <span class="wip-counter" id="tbdCount">0</span>
+    </div>
+    <div id="tbdDrawer" style="display: none; margin-top: 10px;">
+      <div class="task-list" id="tbdList">
+        <div class="empty-state">No parked thoughts or discussion items.</div>
+      </div>
+    </div>
+  </section>
   
   <!-- CARD DETAIL / COMMENTS & DEPENDENCIES MODAL -->
   <div class="modal-backdrop" id="cardNoteModal">
