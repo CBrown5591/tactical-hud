@@ -657,18 +657,6 @@ function toggleCaptureTargetTbd() {
   }
 }
 
-function renderTbdCards() {
-  const listEl = document.getElementById("tbdList");
-  const countEl = document.getElementById("tbdCount");
-  if (!listEl) return;
-
-  if (countEl) countEl.textContent = state.tbdCards.length;
-
-  if (state.tbdCards.length === 0) {
-    listEl.innerHTML = `<div class="empty-state">No parked thoughts or discussion items.</div>`;
-    return;
-  }
-
   listEl.innerHTML = state.tbdCards.map(c => `
     <div class="task-card" style="border-left: 3px solid #64748b; background: rgba(15, 23, 42, 0.65);">
       <div class="task-header">
@@ -683,6 +671,18 @@ function renderTbdCards() {
     </div>
   `).join("");
 }
+
+function renderTbdCards() {
+  const listEl = document.getElementById("tbdList");
+  const countEl = document.getElementById("tbdCount");
+  if (!listEl) return;
+
+  if (countEl) countEl.textContent = state.tbdCards.length;
+
+  if (state.tbdCards.length === 0) {
+    listEl.innerHTML = `<div class="empty-state">No parked thoughts or discussion items.</div>`;
+    return;
+  }
 
 function renderCards() {
   renderTbdCards();
