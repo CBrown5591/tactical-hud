@@ -1,7 +1,7 @@
 // --- js/app.js: Application Core, State, Routing & UI Renderers ---
 
-var STORAGE_KEY = window.STORAGE_KEY || "TACTICAL_HUD_CFG_V2";
-var BOARD_LABELS = window.BOARD_LABELS || {
+const STORAGE_KEY = "TACTICAL_HUD_CFG_V2";
+const BOARD_LABELS = {
   work: "💼 Work",
   life: "🎢 King's Dominion",
   vi: "🏝️ By The VI",
@@ -9,7 +9,7 @@ var BOARD_LABELS = window.BOARD_LABELS || {
   growth: "🎓 Growth"
 };
 
-var state = window.state || {
+let state = {
   context: "work",
   manualOverride: false,
   energyFilter: "all",
@@ -18,110 +18,26 @@ var state = window.state || {
   captureDue: "",
   captureRecur: "none",
   captureIsSpike: false,
+  captureTargetTbd: false,
   saveStateCardId: null,
-  scoreLedgerCardId: null,
   activeNoteCard: null,
   boardCache: {},
   todayCards: [],
   inboxCards: [],
-  allLoadedCards: [],
-  tbdCards = [];
-  captureTargetTbd = false;
-  calendarTelemetry: { bookedHours: 0, eventCount: 0, nextEvent: null },
-  energyQuotas: { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" }
+  tbdCards: [],
+  allLoadedCards: []
 };
 
-function calculateEnergyQuotas(calData = null) {
-  const isWork = state.context === "work";
-  const isMission = state.context === "mission";
-  const now = new Date();
-  const day = now.getDay();
-  const isWeekend = (day === 0 || day === 6);
-  const isOff = (calData && calData.isWorkOffDay) || isWeekend;
-
-  // MISSION CONTROL: Focused Sprint format (Max 2 tasks: 1 Heavy/Med + 1 Light)
-  if (isMission) {
-    return {
-      red: 1,
-      yellow: 1,
-      green: 1,
-      total: 2,
-      label: "SPRINT LOAD (1 HEAVY/MED / 1 LIGHT)"
-    };
-  }
-
-  // PERSONAL HUD: Maintenance rhythm (Max 3 tasks: 0 Heavy / 1 Med / 2 Light)
-  if (state.context === "personal") {
-    return {
-      red: 0,
-      yellow: 1,
-      green: 2,
-      total: 3,
-      label: "MAINTENANCE (0 HEAVY / 1 MED / 2 LIGHT)"
-    };
-  }
-
-  // WORK HUD: Meeting-damped 9-to-5 window
-  const bookedHours = calData ? (calData.workBookedHours ?? calData.bookedHours ?? 0) : 0;
-
-  if (isWork && isOff) {
-    let offLabel = "🌴 SCHEDULED OFF DAY (WORK LOCKED)";
-    if (isWeekend) {
-      offLabel = "🌴 WEEKEND (WORK LOCKED)";
-    } else if (calData && calData.offDayReason) {
-      offLabel = `🌴 ${calData.offDayReason.toUpperCase()} (WORK LOCKED)`;
-    }
-    return {
-      red: 0, yellow: 0, green: 0, total: 0,
-      label: offLabel
-    };
-  }
-
-  let maxRed = 1;
-  let maxYellow = 1;
-  let maxGreen = 2;
-
-  if (bookedHours > 6.0) {
-    maxRed = 0; maxYellow = 0; maxGreen = 2;
-  } else if (bookedHours > 4.0) {
-    maxRed = 0; maxYellow = 1; maxGreen = 2;
-  } else if (bookedHours > 2.0) {
-    maxRed = 0; maxYellow = 2; maxGreen = 2;
-  }
-
-  const total = maxRed + maxYellow + maxGreen;
-  const label = `${maxRed} HEAVY / ${maxYellow} MED / ${maxGreen} LIGHT`;
-  return { red: maxRed, yellow: maxYellow, green: maxGreen, total, label };
-}
-
-function determineAutoContext(cfg, calTelemetry = null) {
+function determineAutoContext(cfg) {
   const params = new URLSearchParams(window.location.search);
-  const pCtx = params.get("context");
-  if (pCtx === "work" || pCtx === "personal" || pCtx === "mission") {
+  if (params.get("context") === "work" || params.get("context") === "personal" || params.get("context") === "mission") {
     state.manualOverride = true;
-    return pCtx;
+    return params.get("context");
   }
-
   const now = new Date();
   const day = now.getDay();
   const hour = now.getHours() + (now.getMinutes() / 60);
-
-  // If calendar marks today as an off-day (e.g. "Charles Off Day", Holiday, PTO):
-  // Morning routes to Mission Control for venture builds; evening to Personal
-  if (calTelemetry && calTelemetry.isWorkOffDay) {
-    return hour < 13.0 ? "mission" : "personal";
-  }
-
-  // Monday - Friday schedule:
-  if (day >= 1 && day <= 5) {
-    if (hour >= 8.0 && hour < 17.0) return "work";
-    if (hour >= 17.0 && hour < 19.0) return "personal";
-    if (hour >= 19.0 && hour < 22.5 && day <= 4) return "mission"; // Mon - Thu evening sprint
-    return "personal";
-  }
-
-  // Weekends: Default to Personal
-  return "personal";
+  return (day >= 1 && day <= 5 && hour >= 8.5 && hour < 17.0) ? "work" : "personal";
 }
 
 function applyTheme() {
@@ -144,12 +60,13 @@ function applyTheme() {
   const modeTitleEl = document.getElementById("modeTitle");
   if (modeTitleEl) modeTitleEl.textContent = title;
 
-  // Dynamically render Quick Capture pills based on active context and cloud boards
   renderQuickCaptureBoardPills();
 
   const targetLabelEl = document.getElementById("captureTargetLabel");
   if (targetLabelEl) {
-    targetLabelEl.textContent = `Target: ${BOARD_LABELS[state.captureBoard] || "Inbox"} -> 📥 Inbox`;
+    targetLabelEl.textContent = state.captureTargetTbd
+      ? `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 💡 TBD`
+      : `Target: ${BOARD_LABELS[state.captureBoard] || "Inbox"} -> 📥 Inbox`;
   }
 }
 
@@ -177,10 +94,13 @@ function renderQuickCaptureBoardPills() {
 
 function toggleManualContext() {
   state.manualOverride = true;
-  // 3-way cyclic rotation: Work -> Mission Control -> Personal -> Work
-  if (state.context === "work") state.context = "mission";
-  else if (state.context === "mission") state.context = "personal";
-  else state.context = "work";
+  if (state.context === "work") {
+    state.context = "mission";
+  } else if (state.context === "mission") {
+    state.context = "personal";
+  } else {
+    state.context = "work";
+  }
   applyTheme();
   syncHud();
 }
@@ -188,7 +108,12 @@ function toggleManualContext() {
 function selectCaptureBoard(boardKey, label) {
   state.captureBoard = boardKey;
   renderQuickCaptureBoardPills();
-  document.getElementById("captureTargetLabel").textContent = `Target: ${label} -> 📥 Inbox`;
+  const targetLabelEl = document.getElementById("captureTargetLabel");
+  if (targetLabelEl) {
+    targetLabelEl.textContent = state.captureTargetTbd
+      ? `Target: ${label} -> 💡 TBD`
+      : `Target: ${label} -> 📥 Inbox`;
+  }
 }
 
 function selectCaptureEnergy(color) {
@@ -198,41 +123,61 @@ function selectCaptureEnergy(color) {
   });
 }
 
+function toggleQuickCaptureSpikeMacro() {
+  state.captureIsSpike = !state.captureIsSpike;
+  const btn = document.getElementById("macroSpikeBtn");
+  if (btn) btn.classList.toggle("active", state.captureIsSpike);
+
+  const input = document.getElementById("quickCaptureInput");
+  if (state.captureIsSpike) {
+    selectCaptureEnergy("yellow");
+    if (input && !input.value.startsWith("🔬 Spike: ")) {
+      input.value = "🔬 Spike: " + input.value;
+      input.focus();
+    }
+  } else {
+    selectCaptureEnergy("none");
+    if (input && input.value.startsWith("🔬 Spike: ")) {
+      input.value = input.value.replace("🔬 Spike: ", "");
+    }
+  }
+}
+
+window.toggleCaptureTargetTbd = function() {
+  state.captureTargetTbd = !state.captureTargetTbd;
+  const btn = document.getElementById("capTargetTbdBtn");
+  if (btn) btn.classList.toggle("active", state.captureTargetTbd);
+  const targetLabelEl = document.getElementById("captureTargetLabel");
+  if (targetLabelEl) {
+    targetLabelEl.textContent = state.captureTargetTbd
+      ? `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 💡 TBD`
+      : `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 📥 Inbox`;
+  }
+};
+
+window.toggleInboxDrawer = function() {
+  const drawer = document.getElementById("inboxDrawer");
+  const chevron = document.getElementById("inboxToggleChevron");
+  if (!drawer) return;
+  const isHidden = window.getComputedStyle(drawer).display === "none";
+  drawer.style.display = isHidden ? "block" : "none";
+  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
+};
+
+window.toggleTbdDrawer = function() {
+  const drawer = document.getElementById("tbdDrawer");
+  const chevron = document.getElementById("tbdToggleChevron");
+  if (!drawer) return;
+  const isHidden = window.getComputedStyle(drawer).display === "none";
+  drawer.style.display = isHidden ? "block" : "none";
+  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
+};
+
 function selectCaptureRecur(cadence) {
   state.captureRecur = cadence;
   document.querySelectorAll("[data-cap-recur]").forEach(btn => {
     btn.classList.toggle("active", btn.dataset.capRecur === cadence);
   });
-
-  // FEATURE: Recurring tasks DO NOT get deadlines forced by default!
-  if (cadence !== "none" && !state.captureCustomDueExplicit) {
-    selectCaptureDue("none");
-  }
-}
-
-function toggleQuickCaptureSpikeMacro() {
-  state.captureIsSpike = !state.captureIsSpike;
-  const btn = document.getElementById("macroSpikeBtn");
-  const input = document.getElementById("quickCaptureInput");
-
-  if (state.captureIsSpike) {
-    selectCaptureEnergy("yellow");
-    if (btn) btn.classList.add("active");
-    if (input) {
-      const cur = input.value.trim();
-      if (!cur) {
-        input.value = "🔬 Spike: ";
-      } else if (!cur.startsWith("🔬 Spike:")) {
-        input.value = "🔬 Spike: " + cur;
-      }
-      input.focus();
-    }
-  } else {
-    if (btn) btn.classList.remove("active");
-    if (input && input.value.startsWith("🔬 Spike: ")) {
-      input.value = input.value.replace(/^🔬 Spike:\s*/, "");
-    }
-  }
 }
 
 function selectCaptureDue(preset) {
@@ -256,11 +201,7 @@ function selectCaptureDue(preset) {
 }
 
 function selectCaptureCustomDue(val) {
-  if (!val) {
-    state.captureCustomDueExplicit = false;
-    return selectCaptureDue("none");
-  }
-  state.captureCustomDueExplicit = true;
+  if (!val) return selectCaptureDue("none");
   const parts = val.split("-");
   const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 17, 0, 0);
   state.captureDue = d.toISOString();
@@ -275,8 +216,35 @@ function setEnergyFilter(energy) {
   renderCards();
 }
 
+function calculateEnergyQuotas(calData) {
+  let isWorkOffDay = false;
+  let bookedHours = 0;
+  if (calData && typeof calData === "object") {
+    isWorkOffDay = !!calData.isWorkOffDay;
+    bookedHours = calData.bookedHours || 0;
+  }
+  const isWork = state.context === "work";
+  const now = new Date();
+  const day = now.getDay();
+  const isWeekend = (day === 0 || day === 6);
+
+  if (isWork && (isWorkOffDay || isWeekend)) {
+    return { red: 0, yellow: 0, green: 0, maxToday: 0, isOffDay: true };
+  }
+  if (!isWork) {
+    return { red: 1, yellow: 1, green: 2, maxToday: 4, isOffDay: false };
+  }
+  if (bookedHours >= 5.5) {
+    return { red: 0, yellow: 1, green: 2, maxToday: 3, isOffDay: false };
+  } else if (bookedHours >= 3.5) {
+    return { red: 1, yellow: 1, green: 2, maxToday: 4, isOffDay: false };
+  } else {
+    return { red: 1, yellow: 2, green: 2, maxToday: 5, isOffDay: false };
+  }
+}
+
 async function autoPromoteCards(results) {
-  let changedAny = false;
+  let promotedAny = false;
   const allCardsMap = {};
   for (const { listMap, cards } of results) {
     for (const c of cards) {
@@ -290,97 +258,54 @@ async function autoPromoteCards(results) {
     }
   }
 
-  const ctx = state.context;
   const activeBoards = typeof getActiveBoardsForContext === "function"
-    ? getActiveBoardsForContext(ctx)
+    ? getActiveBoardsForContext(state.context)
     : [];
   const boardPriority = activeBoards.map(b => b.key);
+
   const getBoardPriorityIdx = (bKey) => {
     const idx = boardPriority.indexOf(bKey);
     return idx === -1 ? 99 : idx;
   };
 
   const quotas = state.energyQuotas || calculateEnergyQuotas(0);
+  const currentCounts = { red: 0, yellow: 0, green: 0 };
+  let currentTotalToday = 0;
 
-  // --- PHASE 1: COLLECT ALL CURRENT TODAY CARDS ACROSS BOARDS ---
-  const todayEntries = [];
-  results.forEach(({ boardKey, listMap, cards }) => {
-    if (!listMap.today) return;
-    cards.forEach(card => {
-      if (card.idList === listMap.today && !card.name.startsWith("🎯")) {
-        const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
-        todayEntries.push({ card, boardKey, listMap, energy: col });
+  for (const { listMap, cards } of results) {
+    if (!listMap.today) continue;
+    cards.forEach(c => {
+      if (c.idList === listMap.today && !c.name.startsWith("🎯")) {
+        const energy = getCardEnergyTier(c);
+        if (currentCounts[energy] !== undefined) currentCounts[energy]++;
+        currentTotalToday++;
       }
     });
-  });
-
-  // --- PHASE 2: OVERFLOW REBALANCING (DEMOTE EXCESS BASED ON PRIORITY) ---
-  for (const energy of ["red", "yellow", "green"]) {
-    const matching = todayEntries.filter(e => e.energy === energy);
-    const maxAllowed = quotas[energy] || 0;
-
-    if (matching.length > maxAllowed) {
-      matching.sort((a, b) => {
-        const prioA = getBoardPriorityIdx(a.boardKey);
-        const prioB = getBoardPriorityIdx(b.boardKey);
-        if (prioA !== prioB) return prioA - prioB;
-        const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
-        const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
-        return dueA - dueB;
-      });
-
-      const toDemote = matching.slice(maxAllowed);
-      for (const entry of toDemote) {
-        if (entry.listMap.queue) {
-          try {
-            await trelloFetch(`/cards/${entry.card.id}`, "PUT", `&idList=${entry.listMap.queue}&pos=top`);
-            entry.card.idList = entry.listMap.queue;
-            if (allCardsMap[entry.card.id]) allCardsMap[entry.card.id].idList = entry.listMap.queue;
-            const idx = todayEntries.findIndex(e => e.card.id === entry.card.id);
-            if (idx !== -1) todayEntries.splice(idx, 1);
-            changedAny = true;
-          } catch (e) {
-            console.error("Failed to demote overflow card:", entry.card.id, e);
-          }
-        }
-      }
-    }
   }
 
-  // --- PHASE 3: CALCULATE REMAINING GLOBAL SLOTS ---
-  const currentCounts = { red: 0, yellow: 0, green: 0 };
-  todayEntries.forEach(e => {
-    if (currentCounts[e.energy] !== undefined) currentCounts[e.energy]++;
-  });
-
-  const slots = {
+  const availableSlots = {
     red: Math.max(0, quotas.red - currentCounts.red),
     yellow: Math.max(0, quotas.yellow - currentCounts.yellow),
     green: Math.max(0, quotas.green - currentCounts.green)
   };
+  let totalRemainingCapacity = Math.max(0, quotas.maxToday - currentTotalToday);
 
-  let totalSlots = slots.red + slots.yellow + slots.green;
-  if (totalSlots === 0) return changedAny;
+  if (totalRemainingCapacity <= 0) return false;
 
-  // --- PHASE 4: UNIFIED MULTI-BOARD PROMOTION ---
-  const queueCandidates = [];
-  results.forEach(({ boardKey, listMap, cards }) => {
-    if (!listMap.queue || !listMap.today) return;
-    cards.forEach(card => {
+  const candidatePool = [];
+  for (const { boardKey, listMap, cards } of results) {
+    if (!listMap.queue) continue;
+    for (const card of cards) {
       if (card.idList === listMap.queue) {
-        const blockers = getUnresolvedBlockers(card, allCardsMap);
-        if (blockers.length === 0) {
-          const col = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
-          queueCandidates.push({ card, boardKey, listMap, energy: col });
-        }
+        candidatePool.push({ card, boardKey, listMap });
       }
-    });
-  });
+    }
+  }
 
-  queueCandidates.sort((a, b) => {
-    const prioA = getBoardPriorityIdx(a.boardKey);
-    const prioB = getBoardPriorityIdx(b.boardKey);
-    if (prioA !== prioB) return prioA - prioB;
+  candidatePool.sort((a, b) => {
+    const pA = getBoardPriorityIdx(a.boardKey);
+    const pB = getBoardPriorityIdx(b.boardKey);
+    if (pA !== pB) return pA - pB;
 
     const dueA = a.card.due ? new Date(a.card.due).getTime() : Infinity;
     const dueB = b.card.due ? new Date(b.card.due).getTime() : Infinity;
@@ -389,24 +314,60 @@ async function autoPromoteCards(results) {
     return parseInt(a.card.id.substring(0, 8), 16) - parseInt(b.card.id.substring(0, 8), 16);
   });
 
-  for (const candidate of queueCandidates) {
-    if (totalSlots === 0) break;
-    const col = candidate.energy;
-    if (slots[col] && slots[col] > 0) {
+  for (const candidate of candidatePool) {
+    if (totalRemainingCapacity <= 0) break;
+    const { card, listMap } = candidate;
+
+    const blockers = typeof getUnresolvedBlockers === "function" 
+      ? getUnresolvedBlockers(card, allCardsMap)
+      : [];
+    if (blockers.length > 0) continue;
+
+    const energy = getCardEnergyTier(card);
+    if (availableSlots[energy] && availableSlots[energy] > 0) {
       try {
-        await trelloFetch(`/cards/${candidate.card.id}`, "PUT", `&idList=${candidate.listMap.today}`);
+        await trelloFetch(`/cards/${card.id}`, "PUT", `&idList=${listMap.today}`);
         candidate.card.idList = candidate.listMap.today;
         if (allCardsMap[candidate.card.id]) allCardsMap[candidate.card.id].idList = candidate.listMap.today;
-        slots[col]--;
-        totalSlots--;
-        changedAny = true;
+        availableSlots[energy]--;
+        totalRemainingCapacity--;
+        promotedAny = true;
       } catch (e) {
-        console.error("Auto-promote failed for card:", candidate.card.id, e);
+        console.error("Auto-promote failed for card:", card.id, e);
       }
     }
   }
+  return promotedAny;
+}
 
-  return changedAny;
+function inferEnergyFromTitle(title = "") {
+  if (!title) return "none";
+  let kwRed = "architect, architecture, migration, migrate, deploy, deployment, outage, incident, sev-1, disaster, scada, infra, provision, rebuild, failover, security review";
+  let kwYellow = "configure, configuration, update, review, troubleshoot, investigate, test, testing, script, documentation, doc, prep, refactor, sync, analyze, analysis";
+  let kwGreen = "reply, email, ping, check, log, approve, approval, quick, clean, archive, submit, order, call, receipt, schedule, invoice";
+
+  if (typeof activeCloudLedger !== "undefined" && activeCloudLedger.energyKeywords) {
+    kwRed = activeCloudLedger.energyKeywords.red || kwRed;
+    kwYellow = activeCloudLedger.energyKeywords.yellow || kwYellow;
+    kwGreen = activeCloudLedger.energyKeywords.green || kwGreen;
+  }
+
+  const buildRegex = (kwStr) => {
+    const tokens = kwStr.split(",").map(t => t.trim()).filter(Boolean);
+    if (!tokens.length) return null;
+    const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|");
+    return new RegExp(`\\b(${escaped})\\b`, "i");
+  };
+
+  const rxRed = buildRegex(kwRed);
+  const rxYellow = buildRegex(kwYellow);
+  const rxGreen = buildRegex(kwGreen);
+
+  if (rxRed && rxRed.test(title)) return "red";
+  if (rxYellow && rxYellow.test(title)) return "yellow";
+  if (rxGreen && rxGreen.test(title)) return "green";
+
+  return "none";
 }
 
 async function syncHud() {
@@ -420,38 +381,15 @@ async function syncHud() {
 
   state.energyQuotas = calculateEnergyQuotas(calData);
 
-  // Ingest custom boards if available
   const customBoards = typeof getCustomBoards === "function" ? getCustomBoards() : [];
   customBoards.forEach(b => {
     cfg.boards[b.key] = b.id;
     BOARD_LABELS[b.key] = `${b.icon || '🚀'} ${b.name}`;
   });
 
-  // Resolve active boards with resilient fallback
-  let activeBoards = [];
-  if (typeof getActiveBoardsForContext === "function") {
-    activeBoards = getActiveBoardsForContext(state.context);
-  }
-  
-  if (!activeBoards || activeBoards.length === 0) {
-    if (state.context === "work") {
-      activeBoards = [
-        { key: "work", name: "Work", icon: "💼" },
-        { key: "growth", name: "Growth", icon: "🎓" }
-      ];
-    } else if (state.context === "mission") {
-      activeBoards = [
-        { key: "vi", name: "By The VI", icon: "🏝️" },
-        { key: "lab", name: "Hiiii-Power", icon: "🔬" }
-      ];
-    } else {
-      activeBoards = [
-        { key: "life", name: "King's Dominion", icon: "🎢" },
-        { key: "growth", name: "Growth", icon: "🎓" }
-      ];
-    }
-  }
-
+  const activeBoards = typeof getActiveBoardsForContext === "function"
+    ? getActiveBoardsForContext(state.context)
+    : [];
   const activeKeys = activeBoards.map(b => b.key);
   const validTargets = activeKeys.filter(k => cfg.boards && cfg.boards[k]);
 
@@ -460,26 +398,33 @@ async function syncHud() {
       try {
         return await fetchBoardData(k, cfg.boards[k]);
       } catch (err) {
+        console.warn(`[HUD Sync Warning] Skipped board '${k}' (${cfg.boards[k]}):`, err.message);
         return { boardKey: k, listMap: {}, cards: [], error: err.message };
       }
     });
     const allBoardResults = await Promise.all(boardPromises);
     const results = allBoardResults.filter(b => !b.error && b.cards);
 
-    if (results.length === 0 && allBoardResults.some(b => b.error)) {
-      const firstErr = allBoardResults.find(b => b.error);
-      throw new Error(`Board '${firstErr.boardKey}' failed: ${firstErr.error}`);
-    }
+    results.forEach(({ cards }) => {
+      const ledgerCard = cards.find(c => c.name.startsWith("📊 SCORE LEDGER") || c.name.startsWith("📊 TACTICAL SCORE"));
+      if (ledgerCard) {
+        state.scoreLedgerCardId = ledgerCard.id;
+        if (typeof hydrateCloudLedgerFromTrello === "function") {
+          hydrateCloudLedgerFromTrello(ledgerCard.desc);
+        }
+      }
+    });
 
-    await manageCardDependencies(results);
+    if (typeof manageCardDependencies === "function") {
+      await manageCardDependencies(results);
+    }
     await autoPromoteCards(results);
 
     state.todayCards = [];
     state.inboxCards = [];
-    state.allLoadedCards = [];
     state.tbdCards = [];
+    state.allLoadedCards = [];
     state.saveStateCardId = null;
-    state.scoreLedgerCardId = null;
 
     const allCardsMap = {};
     for (const { listMap, cards } of results) {
@@ -495,51 +440,24 @@ async function syncHud() {
     }
 
     results.forEach(({ boardKey, listMap, cards }) => {
-      const cache = state.boardCache[boardKey];
       cards.forEach(card => {
         if (card.name.startsWith("🎯 SAVE STATE")) {
           if ((state.context === "work" && boardKey === "work") || (state.context === "personal" && boardKey === "life")) {
             state.saveStateCardId = card.id;
-            const inputEl = document.getElementById("saveStateInput");
-            if (inputEl) inputEl.value = card.desc || "";
+            document.getElementById("saveStateInput").value = card.desc || "";
           }
           return;
         }
 
-        // --- CONTEXT-SCOPED CLOUD LEDGER DETECTION ---
-        const targetLedgerName = `SCORE LEDGER (${state.context.toUpperCase()})`;
-        const isGenericLedger = card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("⚡ SCORE LEDGER");
-        const isScopedLedger = card.name.toUpperCase().includes(targetLedgerName);
-
-        if (isScopedLedger || (isGenericLedger && !state.scoreLedgerCardId)) {
-          const isContextOwner = 
-            (state.context === "work" && boardKey === "work") ||
-            (state.context === "personal" && boardKey === "life") ||
-            (state.context === "mission" && (boardKey === "vi" || boardKey === "lab"));
-
-          if (isContextOwner) {
-            state.scoreLedgerCardId = card.id;
-            if (typeof hydrateCloudLedgerFromTrello === "function") {
-              hydrateCloudLedgerFromTrello(card.desc || "");
-            }
-            return;
-          }
+        if (card.name.startsWith("📊 SCORE LEDGER") || card.name.startsWith("📊 TACTICAL SCORE")) {
+          return;
         }
 
-        let energyColor = "none";
-        const matchedEnergyLabel = (card.labels || []).find(l => ["red", "yellow", "green"].includes(l.color));
-        if (matchedEnergyLabel) {
-          energyColor = matchedEnergyLabel.color;
-        } else if (typeof inferEnergyFromTitle === "function") {
-          const autoInferred = inferEnergyFromTitle(card.name);
-          if (autoInferred !== "none") {
-            energyColor = autoInferred;
-            if (cache && cache.labelMap && cache.labelMap[autoInferred]) {
-              setCardEnergy(card.id, boardKey, autoInferred).catch(e => console.warn("Auto-label failed:", e));
-            }
-          }
+        let energyColor = (card.labels && card.labels[0]) ? card.labels[0].color : "none";
+        if (energyColor === "none" && typeof inferEnergyFromTitle === "function") {
+          energyColor = inferEnergyFromTitle(card.name);
         }
-        
+
         const commentsList = (card.actions && Array.isArray(card.actions))
           ? card.actions.filter(a => a.type === "commentCard" && a.data && a.data.text).map(a => ({
               id: a.id,
@@ -548,7 +466,11 @@ async function syncHud() {
             }))
           : [];
         const latestNote = commentsList.length > 0 ? commentsList[0].text : (card.desc || "");
-        const rels = extractCardRelations(card, allCardsMap);
+        
+        const rels = typeof extractCardRelations === "function" 
+          ? extractCardRelations(card, allCardsMap)
+          : { blockedBy: [], blocking: [] };
+
         const activeBlockers = [];
         if (rels.blockedBy && rels.blockedBy.length > 0) {
           for (const b of rels.blockedBy) {
@@ -561,16 +483,15 @@ async function syncHud() {
 
         const item = {
           id: card.id,
-          idList: card.idList,
           name: card.name,
           desc: card.desc || "",
-          due: card.due || "",
           notes: latestNote,
           comments: commentsList,
           boardKey,
           boardName: BOARD_LABELS[boardKey] || boardKey,
           energy: energyColor,
           labels: card.labels || [],
+          due: card.due || "",
           shortUrl: card.shortUrl || `https://trello.com/c/${card.id}`,
           relations: rels,
           blockers: activeBlockers,
@@ -587,89 +508,137 @@ async function syncHud() {
       });
     });
 
-    // --- AUTO-SPAWN MISSING CONTEXT LEDGER (SAFE) ---
-    if (!state.scoreLedgerCardId) {
-      try {
-        const primaryRes = results.find(r => 
-          (state.context === "work" && r.boardKey === "work") || 
-          (state.context === "personal" && r.boardKey === "life") ||
-          (state.context === "mission" && (r.boardKey === "vi" || r.boardKey === "lab"))
-        );
-        if (primaryRes && primaryRes.listMap) {
-          const targetList = primaryRes.listMap.inbox || primaryRes.listMap.today;
-          if (targetList) {
-            const cardTitle = `📊 SCORE LEDGER (${state.context.toUpperCase()})`;
-            const initialPayload = JSON.stringify(activeCloudLedger, null, 2);
-            const newLedgerCard = await trelloFetch(
-              `/cards?idList=${targetList}&name=${encodeURIComponent(cardTitle)}&pos=bottom`,
-              'POST',
-              '',
-              { desc: initialPayload }
-            );
-            if (newLedgerCard && newLedgerCard.id) {
-              state.scoreLedgerCardId = newLedgerCard.id;
-              console.log(`[Score Sync] Auto-created ${cardTitle} on ${primaryRes.boardKey}:`, newLedgerCard.id);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn("[Score Sync] Non-blocking auto-create skipped:", e.message);
-      }
-    }
-
     renderCards();
     updateQuickCaptureBlockerDropdown();
-    if (typeof updateRingDisplay === "function") updateRingDisplay();
   } catch (err) {
     console.error(err);
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
   }
 }
 
-// --- DRAWER TOGGLE HELPERS ---
-function toggleInboxDrawer() {
-  const drawer = document.getElementById("inboxDrawer");
-  const chevron = document.getElementById("inboxToggleChevron");
-  if (!drawer) return;
-  const isHidden = window.getComputedStyle(drawer).display === "none";
-  drawer.style.display = isHidden ? "block" : "none";
-  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
-}
-
-function toggleTbdDrawer() {
-  const drawer = document.getElementById("tbdDrawer");
-  const chevron = document.getElementById("tbdToggleChevron");
-  if (!drawer) return;
-  const isHidden = window.getComputedStyle(drawer).display === "none";
-  drawer.style.display = isHidden ? "block" : "none";
-  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
-}
-
-function toggleCaptureTargetTbd() {
-  state.captureTargetTbd = !state.captureTargetTbd;
-  const btn = document.getElementById("capTargetTbdBtn");
-  if (btn) btn.classList.toggle("active", state.captureTargetTbd);
-  const targetLabelEl = document.getElementById("captureTargetLabel");
-  if (targetLabelEl) {
-    targetLabelEl.textContent = state.captureTargetTbd
-      ? `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 💡 TBD`
-      : `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 📥 Inbox`;
+function getCardEnergyTier(card) {
+  if (card.energy && card.energy !== "none") return card.energy;
+  if (!card.labels || !card.labels.length) return "none";
+  for (const lb of card.labels) {
+    const col = lb.color;
+    if (col === "red" || col === "yellow" || col === "green") return col;
   }
+  return "none";
 }
 
-  listEl.innerHTML = state.tbdCards.map(c => `
-    <div class="task-card" style="border-left: 3px solid #64748b; background: rgba(15, 23, 42, 0.65);">
-      <div class="task-header">
-        <span class="board-badge">${c.boardName}</span>
-        <div class="task-actions">
-          <button class="icon-btn" title="Move to Inbox for Action" onclick="moveCard('${c.id}', '${c.boardKey}', 'inbox')">📥</button>
-          <button class="icon-btn" title="Card Details / Notes" onclick="openNoteModal('${c.id}')">💬</button>
+function renderCards() {
+  const filterFn = c => state.energyFilter === "all" || c.energy === state.energyFilter;
+  const todayFiltered = state.todayCards.filter(filterFn);
+  const inboxFiltered = state.inboxCards.filter(filterFn);
+
+  const wipEl = document.getElementById("todayCount");
+  const maxToday = (state.energyQuotas && state.energyQuotas.maxToday !== undefined) ? state.energyQuotas.maxToday : 4;
+  wipEl.textContent = `${state.todayCards.length} / ${maxToday}`;
+  wipEl.classList.toggle("over", state.todayCards.length > maxToday);
+
+  const todayLabelEl = document.getElementById("todaySectionLabel");
+  if (todayLabelEl && state.energyQuotas) {
+    const q = state.energyQuotas;
+    if (q.isOffDay) {
+      todayLabelEl.textContent = `⚡ OFF-DAY PROTOCOL (0 SLOTS ALLOCATED)`;
+    } else {
+      todayLabelEl.textContent = `⚡ TODAY'S LOAD (${q.red} HEAVY / ${q.yellow} MED / ${q.green} LIGHT)`;
+    }
+  }
+
+  document.getElementById("inboxCount").textContent = state.inboxCards.length;
+
+  const todayContainer = document.getElementById("todayList");
+  todayContainer.innerHTML = todayFiltered.length ? "" : `<div class="empty-state">No cards matching filter in ⚡ Today.</div>`;
+  todayFiltered.forEach(c => {
+    const el = document.createElement("div");
+    el.className = `task-card energy-${c.energy}`;
+    const noteSnippet = c.notes
+      ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>`
+      : "";
+
+    const blockerTag = (c.blockers && c.blockers.length > 0)
+      ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>`
+      : "";
+
+    const recurCadence = getCardRecurCadence(c);
+    const recurTag = recurCadence !== "none"
+      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${recurCadence === "twicedaily" ? "TWICE DAILY" : recurCadence.toUpperCase()}</span>`
+      : "";
+
+    let dueTag = "";
+    if (c.due) {
+      const dueDate = new Date(c.due);
+      const now = new Date();
+      const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+      let dueClass = "background:rgba(148,163,184,0.15); color:#94a3b8; border:1px solid #334155;";
+      let dueText = dueDate.toLocaleDateString([], { month: "short", day: "numeric" });
+      if (diffHours < 0) {
+        dueClass = "background:rgba(244,63,94,0.2); color:#fda4af; border:1px solid #f43f5e;";
+        dueText = `⚠️ OVERDUE (${dueText})`;
+      } else if (diffHours <= 24) {
+        dueClass = "background:rgba(234,179,8,0.2); color:#fde047; border:1px solid #eab308;";
+        dueText = `⏳ DUE TODAY`;
+      }
+      dueTag = `<span style="${dueClass} padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700;">📅 ${dueText}</span>`;
+    }
+
+    el.innerHTML = `
+      <div class="task-info">
+        <div class="task-title">${escapeHtml(c.name)}</div>
+        <div class="task-meta">
+          <span class="board-tag">${c.boardName}</span>
+          ${dueTag}
+          ${recurTag}
+          ${blockerTag}
+        </div>
+        ${noteSnippet}
+      </div>
+      <div class="task-actions">
+        <button class="icon-btn" title="1:1 Warp Swap (Bypass Lane)" onclick="promptWarpSwap('${c.id}', '${c.boardKey}')" style="color:var(--accent);">⇄</button>
+        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
+        <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
+        <button class="icon-btn done" title="Complete Task" onclick="initiateCardCompletion('${c.id}','${c.boardKey}')">✓</button>
+      </div>
+    `;
+    todayContainer.appendChild(el);
+  });
+
+  const inboxContainer = document.getElementById("inboxList");
+  inboxContainer.innerHTML = inboxFiltered.length ? "" : `<div class="empty-state">📥 Inbox clear!</div>`;
+  inboxFiltered.forEach(c => {
+    const el = document.createElement("div");
+    el.className = `task-card energy-${c.energy}`;
+
+    const inboxRecurCadence = getCardRecurCadence(c);
+    const inboxRecurTag = inboxRecurCadence !== "none"
+      ? `<span style="background:rgba(56,189,248,0.2); color:var(--accent); border:1px solid var(--accent); padding:1px 6px; border-radius:4px; font-size:0.68rem;">🔁 ${inboxRecurCadence === "twicedaily" ? "TWICE DAILY" : inboxRecurCadence.toUpperCase()}</span>`
+      : "";
+
+    el.innerHTML = `
+      <div class="task-info">
+        <div class="task-title">${escapeHtml(c.name)}</div>
+        <div class="task-meta">
+          <span class="board-tag">${c.boardName}</span>
+          ${inboxRecurTag}
+          <span class="energy-picker" title="Assign Energy Quota">
+            <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
+            <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
+            <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
+          </span>
         </div>
       </div>
-      <div class="task-title" style="color: #cbd5e1; font-weight: 500;">${escapeHtml(c.name)}</div>
-      ${c.notes ? `<div class="task-notes" style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">${escapeHtml(c.notes)}</div>` : ''}
-    </div>
-  `).join("");
+      <div class="task-actions">
+        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
+        <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
+        <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
+        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="initiateCardCompletion('${c.id}','${c.boardKey}')">✓</button>
+      </div>
+    `;
+    inboxContainer.appendChild(el);
+  });
+
+  renderTbdCards();
 }
 
 function renderTbdCards() {
@@ -684,87 +653,19 @@ function renderTbdCards() {
     return;
   }
 
-function renderCards() {
-  renderTbdCards();
-  const filterFn = c => state.energyFilter === "all" || c.energy === state.energyFilter;
-  const todayFiltered = state.todayCards.filter(filterFn);
-  const inboxFiltered = state.inboxCards.filter(filterFn);
-
-  const quotas = state.energyQuotas || { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" };
-  const todayLabel = document.getElementById("todaySectionLabel");
-  if (todayLabel) todayLabel.textContent = `⚡ TODAY'S LOAD (${quotas.label})`;
-
-  const wipEl = document.getElementById("todayCount");
-  wipEl.textContent = `${state.todayCards.length} / ${quotas.total}`;
-  wipEl.classList.toggle("over", state.todayCards.length > quotas.total);
-  document.getElementById("inboxCount").textContent = state.inboxCards.length;
-
-  const todayContainer = document.getElementById("todayList");
-  todayContainer.innerHTML = todayFiltered.length ? "" : `<div class="empty-state">No cards matching filter in ⚡ Today.</div>`;
-  todayFiltered.forEach(c => {
-    const el = document.createElement("div");
-    el.className = `task-card energy-${c.energy}`;
-    const noteSnippet = c.notes ? `<div class="task-notes-preview" title="View/Add Comments" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬 ${escapeHtml(c.notes)}</div>` : "";
-    const blockerTag = (c.blockers && c.blockers.length > 0) ? `<span style="background:rgba(239,68,68,0.25); color:#fca5a5; border:1px solid var(--high); padding:1px 6px; border-radius:4px; font-size:0.68rem;" title="Blocked by incomplete tasks">🔒 Blocked by: ${escapeHtml(c.blockers.join(", "))}</span>` : "";
-
-    let dueTag = "";
-    if (c.due && typeof calculateDeadlineModifier === "function") {
-      const mod = calculateDeadlineModifier(c.energy, c.due);
-      const modColor = mod.type === "early" ? "#38bdf8" : (mod.type === "ontime" ? "#22c55e" : "#f43f5e");
-      dueTag = `<span style="background:#090d16; border:1px solid ${modColor}; color:${modColor}; padding:1px 6px; border-radius:4px; font-size:0.68rem; font-weight:700;">📅 ${mod.label}</span>`;
-    }
-
-    el.innerHTML = `
-      <div class="task-info">
-        <div class="task-title">${escapeHtml(c.name)}</div>
-        <div class="task-meta">
-          <span class="board-tag">${c.boardName}</span>
-          <span class="energy-picker" title="Adjust Energy Quota">
-            <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
-            <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
-            <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
-          </span>
-          ${dueTag}
-          ${blockerTag}
-        </div>
-        ${noteSnippet}
-      </div>
-      <div class="task-actions">
-        <button class="icon-btn" title="1:1 Warp Swap (Bypass)" onclick="promptWarpSwap('${c.id}','${c.boardKey}','${c.energy}')">⇄</button>
-        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
-        <button class="icon-btn" title="Move to Waiting" onclick="promptRoadblockDeferral('${c.id}','${c.boardKey}')">⏳</button>
-        <button class="icon-btn done" title="Complete Task" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
-      </div>
-    `;
-    todayContainer.appendChild(el);
-  });
-
-  const inboxContainer = document.getElementById("inboxList");
-  inboxContainer.innerHTML = inboxFiltered.length ? "" : `<div class="empty-state">📥 Inbox clear!</div>`;
-  inboxFiltered.forEach(c => {
-    const el = document.createElement("div");
-    el.className = `task-card energy-${c.energy}`;
-    el.innerHTML = `
-      <div class="task-info">
-        <div class="task-title">${escapeHtml(c.name)}</div>
-        <div class="task-meta">
-          <span class="board-tag">${c.boardName}</span>
-          <span class="energy-picker" title="Assign Energy Quota">
-            <button class="mini-energy-btn ${c.energy === 'red' ? 'active' : ''}" title="🔴 High Voltage (Heavy)" onclick="setCardEnergy('${c.id}','${c.boardKey}','red')">🔴</button>
-            <button class="mini-energy-btn ${c.energy === 'yellow' ? 'active' : ''}" title="🟡 Medium Cruise (Med)" onclick="setCardEnergy('${c.id}','${c.boardKey}','yellow')">🟡</button>
-            <button class="mini-energy-btn ${c.energy === 'green' ? 'active' : ''}" title="🟢 Low Battery (Light)" onclick="setCardEnergy('${c.id}','${c.boardKey}','green')">🟢</button>
-          </span>
+  listEl.innerHTML = state.tbdCards.map(c => `
+    <div class="task-card" style="border-left: 3px solid #64748b; background: rgba(15, 23, 42, 0.65);">
+      <div class="task-header" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+        <span class="board-badge" style="font-size:0.68rem; font-weight:700; color:#94a3b8;">${c.boardName}</span>
+        <div class="task-actions" style="display:flex; gap:4px;">
+          <button class="icon-btn" title="Move to Inbox for Action" onclick="moveCard('${c.id}', '${c.boardKey}', 'inbox')">📥</button>
+          <button class="icon-btn" title="Card Details / Notes" onclick="openNoteModal('${c.id}', '${c.boardKey}')">💬</button>
         </div>
       </div>
-      <div class="task-actions">
-        <button class="icon-btn" title="Comments & Blockers" onclick="openNoteModal('${c.id}','${c.boardKey}')">💬</button>
-        <button class="icon-btn" title="Promote to Today" onclick="moveCard('${c.id}','${c.boardKey}','today')">⚡</button>
-        <button class="icon-btn" title="Stage in Queue" onclick="moveCard('${c.id}','${c.boardKey}','queue')">🗂️</button>
-        <button class="icon-btn done" title="3-Min Kill (Done)" onclick="completeCard('${c.id}','${c.boardKey}')">✓</button>
-      </div>
-    `;
-    inboxContainer.appendChild(el);
-  });
+      <div class="task-title" style="color: #cbd5e1; font-weight: 500;">${escapeHtml(c.name)}</div>
+      ${c.notes ? `<div class="task-notes" style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">${escapeHtml(c.notes)}</div>` : ''}
+    </div>
+  `).join("");
 }
 
 function renderModalComments(comments) {
@@ -841,7 +742,7 @@ async function setCardRecurCadence(newCadence) {
 }
 
 function updateModalEnergyPills(card) {
-  const energy = card ? card.energy : "none";
+  const currentEnergy = getCardEnergyTier(card);
   const map = {
     red: "modalEnergyRed",
     yellow: "modalEnergyYellow",
@@ -849,18 +750,16 @@ function updateModalEnergyPills(card) {
   };
   Object.keys(map).forEach(k => {
     const el = document.getElementById(map[k]);
-    if (el) el.classList.toggle("active", k === energy);
+    if (el) el.classList.toggle("active", k === currentEnergy);
   });
 }
 
-async function setModalCardEnergy(newEnergy) {
+async function setModalCardEnergy(color) {
   if (!state.activeNoteCard) return;
   const { id, boardKey } = state.activeNoteCard;
-  if (typeof setCardEnergy === "function") {
-    await setCardEnergy(id, boardKey, newEnergy);
-    const updated = state.allLoadedCards.find(c => c.id === id);
-    if (updated) updateModalEnergyPills(updated);
-  }
+  await setCardEnergy(id, boardKey, color);
+  const updated = state.allLoadedCards.find(c => c.id === id);
+  if (updated) updateModalEnergyPills(updated);
 }
 
 function openNoteModal(cardId, boardKey) {
@@ -873,7 +772,9 @@ function openNoteModal(cardId, boardKey) {
   
   document.getElementById("cardNoteInput").value = "";
   renderModalComments(card.comments || []);
-  renderModalBlockers(card);
+  if (typeof renderModalBlockers === "function") {
+    renderModalBlockers(card);
+  }
   updateModalRecurPills(card);
   updateModalEnergyPills(card);
   document.getElementById("cardNoteModal").classList.add("open");
@@ -884,15 +785,31 @@ function closeNoteModal() {
   state.activeNoteCard = null;
 }
 
+function updateQuickCaptureBlockerDropdown() {
+  const sel = document.getElementById("quickCaptureBlockerSelect");
+  if (!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = '<option value="">None (Independent)</option>';
+  
+  state.allLoadedCards.forEach(c => {
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = `[${c.boardName}] ${c.name}`;
+    sel.appendChild(opt);
+  });
+  sel.value = currentVal;
+}
+
 async function submitQuickCapture() {
   const input = document.getElementById("quickCaptureInput");
   const name = input.value.trim();
   if (!name) return;
   const targetBoardKey = state.captureBoard;
   const cache = state.boardCache[targetBoardKey];
-  if (!cache || !cache.listMap.inbox) return alert("Target Inbox list not loaded.");
+  if (!cache || !cache.listMap) return alert("Target board lists not loaded.");
+
   const targetListKey = state.captureTargetTbd ? 'tbd' : 'inbox';
-  const targetListId = cache && cache.listMap ? cache.listMap[targetListKey] : null;
+  const targetListId = cache.listMap[targetListKey];
   if (!targetListId) return alert(`Target ${targetListKey.toUpperCase()} list not loaded.`);
 
   const isSpikeTask = state.captureIsSpike || name.startsWith("🔬 Spike:") || name.toLowerCase().startsWith("spike:");
@@ -922,16 +839,16 @@ async function submitQuickCapture() {
   const blockerId = blockerSelect ? blockerSelect.value : "";
 
   input.value = "";
-  if (state.captureTargetTbd) {
-    toggleCaptureTargetTbd();
-  }
-  state.captureCustomDueExplicit = false;
   selectCaptureDue("none");
   selectCaptureRecur("none");
   state.captureIsSpike = false;
   const spikeBtn = document.getElementById("macroSpikeBtn");
   if (spikeBtn) spikeBtn.classList.remove("active");
   if (blockerSelect) blockerSelect.value = "";
+
+  if (state.captureTargetTbd) {
+    toggleCaptureTargetTbd();
+  }
 
   try {
     const newCard = await trelloFetch(
@@ -955,153 +872,30 @@ async function submitQuickCapture() {
   syncHud();
 }
 
-// --- 1:1 WARP SWAP (BYPASS LANE) ENGINE ---
-var _activeWarp = window._activeWarp || { sourceId: null, boardKey: null, energy: null };
-
-function promptWarpSwap(cardId, boardKey, energy) {
-  const card = state.allLoadedCards.find(c => c.id === cardId);
-  if (!card) return;
-  _activeWarp = { sourceId: cardId, boardKey, energy };
-
-  document.getElementById("warpSourceName").textContent = `[${card.boardName}] ${card.name}`;
-  const select = document.getElementById("warpTargetSelect");
-  const allowanceEl = document.getElementById("warpAllowanceStatus");
-  const confirmBtn = document.getElementById("confirmWarpBtn");
-
-  // 1. Try strict energy match in Queue
-  let eligibleQueue = state.allLoadedCards.filter(c => {
-    const cache = state.boardCache[c.boardKey];
-    const isQueue = cache && cache.listMap && c.idList === cache.listMap.queue;
-    return isQueue && c.energy === energy && c.id !== cardId;
-  });
-
-  // 2. Fallback: If no exact energy match in Queue, allow any task in Queue
-  if (eligibleQueue.length === 0) {
-    eligibleQueue = state.allLoadedCards.filter(c => {
-      const cache = state.boardCache[c.boardKey];
-      const isQueue = cache && cache.listMap && c.idList === cache.listMap.queue;
-      return isQueue && c.id !== cardId;
-    });
-  }
-
-  if (eligibleQueue.length === 0) {
-    select.innerHTML = `<option value="">-- No tasks available in Queue --</option>`;
-    confirmBtn.disabled = true;
-  } else {
-    select.innerHTML = eligibleQueue.map(c => `<option value="${c.id}">[${c.boardName}] (${c.energy.toUpperCase()}) ${escapeHtml(c.name)}</option>`).join("");
-    confirmBtn.disabled = false;
-  }
-
-  const isSuper = typeof isSuperSonicActive === "function" && isSuperSonicActive();
-  const freeAvailable = !(activeCloudLedger.today && activeCloudLedger.today.dailyFreeWarpUsed);
-  const tokenCount = (activeCloudLedger.inventory && activeCloudLedger.inventory.warpTokens) || 0;
-
-  if (isSuper) {
-    allowanceEl.textContent = "⚡ SUPER SONIC ACTIVE: Unlimited Free 1:1 Warps Available!";
-    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
-  } else if (freeAvailable) {
-    allowanceEl.textContent = "Daily Free Warp Available (1/1 Remaining). Zero ring cost.";
-    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
-  } else if (tokenCount > 0) {
-    allowanceEl.textContent = `Using Inventory Warp Token (${tokenCount} remaining). Zero ring cost.`;
-    if (eligibleQueue.length > 0) confirmBtn.disabled = false;
-  } else {
-    allowanceEl.textContent = "⚠️ No Warp allowances remaining today. Visit the Vault to purchase a Warp Token for 175 Rings.";
-    confirmBtn.disabled = true;
-  }
-
-  document.getElementById("warpModal").classList.add("open");
-}
-
-function closeWarpModal() {
-  document.getElementById("warpModal").classList.remove("open");
-}
-
-async function confirmWarpSwap() {
-  const targetCardId = document.getElementById("warpTargetSelect").value;
-  if (!targetCardId || !_activeWarp.sourceId) return;
-
-  const sourceCard = state.allLoadedCards.find(c => c.id === _activeWarp.sourceId);
-  const targetCard = state.allLoadedCards.find(c => c.id === targetCardId);
-  if (!sourceCard || !targetCard) return;
-
-  const sourceCache = state.boardCache[sourceCard.boardKey];
-  const targetCache = state.boardCache[targetCard.boardKey];
-  if (!sourceCache || !targetCache) return;
-
-  closeWarpModal();
-
-  try {
-    await trelloFetch(`/cards/${sourceCard.id}`, "PUT", `&idList=${sourceCache.listMap.queue}&pos=top`);
-    await trelloFetch(`/cards/${targetCard.id}`, "PUT", `&idList=${targetCache.listMap.today}&pos=top`);
-
-    const isSuper = typeof isSuperSonicActive === "function" && isSuperSonicActive();
-    if (!isSuper) {
-      if (!activeCloudLedger.today.dailyFreeWarpUsed) {
-        activeCloudLedger.today.dailyFreeWarpUsed = true;
-      } else if (activeCloudLedger.inventory && activeCloudLedger.inventory.warpTokens > 0) {
-        activeCloudLedger.inventory.warpTokens--;
-      }
-      commitScoreLedgerToTrello(activeCloudLedger.today);
-    }
-
-    if (typeof playPomoChime === "function") playPomoChime("chaos");
-    await syncHud();
-  } catch (e) {
-    console.error("Warp swap failed:", e);
-    alert("Failed to execute 1:1 Warp Swap: " + e.message);
-  }
-}
-
-function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
-}
-
 async function fetchCalendarTelemetry() {
   const cfg = loadConfig();
   const card = document.getElementById("calendarTickerCard");
-  const webhookUrl = (cfg && cfg.calendarWebhook) || (window.HUD_CONFIG && window.HUD_CONFIG.calendarWebhook) || "";
-
-  if (!webhookUrl) {
+  if (!cfg || !cfg.calendarWebhook) {
     if (card) card.style.display = "none";
-    state.energyQuotas = calculateEnergyQuotas(null);
     return null;
   }
 
   try {
-    const res = await fetch(webhookUrl, { redirect: "follow" });
+    const res = await fetch(cfg.calendarWebhook);
     if (!res.ok) return null;
     const data = await res.json();
     if (data.error) return null;
-
-    state.calendarTelemetry = data;
-    state.energyQuotas = calculateEnergyQuotas(data);
 
     if (card) card.style.display = "block";
     const summary = document.getElementById("calSummaryText");
     const badge = document.getElementById("calNextBadge");
 
     if (summary) {
-      if (data.isWorkOffDay) {
-        summary.textContent = `🌴 Scheduled Off Day: ${data.offDayReason || "Charles Off Day"}`;
-      } else if (state.context === "work") {
-        summary.textContent = `${data.workBookedHours ?? data.bookedHours} hrs work meetings (8:00a - 5:00p)`;
-      } else {
-        summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
-      }
+      summary.textContent = `${data.bookedHours} hrs scheduled (${data.eventCount} ${data.eventCount === 1 ? 'event' : 'events'})`;
     }
 
     if (badge) {
-      const now = new Date();
-      const isWeekend = (now.getDay() === 0 || now.getDay() === 6);
-      if ((data.isWorkOffDay || isWeekend) && state.context === "work") {
-        badge.className = "cal-badge-busy";
-        if (isWeekend) {
-          badge.textContent = "🌴 Work Locked (Weekend)";
-        } else {
-          badge.textContent = `🌴 Work Locked (${data.offDayReason || "Off Day"})`;
-        }
-      } else if (data.nextEvent) {
+      if (data.nextEvent) {
         if (data.nextEvent.status === "IN PROGRESS") {
           badge.className = "cal-badge-busy";
           badge.textContent = `🔴 In Meeting: ${data.nextEvent.title} (ends in ${data.nextEvent.endsInMinutes}m)`;
@@ -1114,126 +908,21 @@ async function fetchCalendarTelemetry() {
         badge.textContent = "Schedule Clear";
       }
     }
+    state.calendarTelemetry = data;
     return data;
   } catch (e) {
-    state.energyQuotas = calculateEnergyQuotas(null);
+    console.error("Calendar telemetry fetch error:", e);
     return null;
   }
 }
 
-// --- RETROACTIVE ON-TIME COMPLETION ENGINE ---
-var _retroCompletion = window._retroCompletion || { cardId: null, boardKey: null };
-
-function isCardOverdue(card) {
-  if (!card || !card.due) return false;
-  if (typeof isSuperSonicActive === "function" && isSuperSonicActive()) return false;
-
-  const now = new Date();
-  const dueDate = new Date(card.due);
-  const isWork = (state && state.context === "work");
-
-  if (isWork && typeof calculateBusinessHours === "function") {
-    if (now <= dueDate) return false;
-    const overdueBusHours = calculateBusinessHours(dueDate, now);
-    return overdueBusHours > 2.0; // Overdue beyond grace window
-  } else {
-    const diffHours = (dueDate.getTime() - now.getTime()) / (1000 * 60 * 60);
-    return diffHours < -4.0; // Overdue beyond 4h grace
-  }
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, m => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
 }
-
-async function completeCard(cardId, boardKey) {
-  const card = state.allLoadedCards.find(c => c.id === cardId);
-  if (!card) return;
-
-  // If card has an overdue deadline, prompt retroactive verification
-  if (isCardOverdue(card)) {
-    _retroCompletion = { cardId, boardKey };
-    const modal = document.getElementById("retroactiveModal");
-    const titleEl = document.getElementById("retroactiveCardTitle");
-    if (modal && titleEl) {
-      titleEl.textContent = card.name;
-      modal.classList.add("open");
-      return;
-    }
-  }
-
-  await finishCardCompletion(cardId, boardKey, false);
-}
-
-function closeRetroactiveModal() {
-  const modal = document.getElementById("retroactiveModal");
-  if (modal) modal.classList.remove("open");
-  _retroCompletion = { cardId: null, boardKey: null };
-}
-
-async function confirmCompleteCard(isRetroactiveOnTime) {
-  const { cardId, boardKey } = _retroCompletion;
-  closeRetroactiveModal();
-  if (!cardId || !boardKey) return;
-  await finishCardCompletion(cardId, boardKey, isRetroactiveOnTime);
-}
-
-async function finishCardCompletion(cardId, boardKey, isRetroactiveOnTime = false) {
-  const card = state.allLoadedCards.find(c => c.id === cardId);
-  if (card && typeof recordCardCompleted === "function") {
-    await recordCardCompleted(card, isRetroactiveOnTime);
-  }
-
-  // If retroactive on-time completion verified, document comment in Trello
-  if (isRetroactiveOnTime && cardId) {
-    try {
-      const commentText = `🎯 VERIFIED ON-TIME CLEAR: Completed before deadline (Late tax waived).`;
-      await trelloFetch(`/cards/${cardId}/actions/comments`, "POST", `&text=${encodeURIComponent(commentText)}`);
-    } catch (e) {
-      console.warn("Could not post on-time verification comment:", e);
-    }
-  }
-
-  await moveCard(cardId, boardKey, 'done');
-}
-
-// --- BACKGROUND AUTO-REFRESH & DEVICE SYNC ENGINE ---
-var _autoSyncTimer = window._autoSyncTimer || null;
-var AUTO_SYNC_INTERVAL_MS = window.AUTO_SYNC_INTERVAL_MS || (60 * 1000);
-
-function isUserInputActive() {
-  const activeEl = document.activeElement;
-  if (activeEl && (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA" || activeEl.tagName === "SELECT")) {
-    return true;
-  }
-  const openModals = document.querySelectorAll(".modal-backdrop.open");
-  return openModals.length > 0;
-}
-
-function scheduleNextAutoSync() {
-  if (_autoSyncTimer) clearTimeout(_autoSyncTimer);
-  _autoSyncTimer = setTimeout(async () => {
-    if (document.visibilityState === "visible" && !isUserInputActive()) {
-      try {
-        await syncHud();
-      } catch (e) {
-        console.warn("[Auto-Refresh] Background sync skipped:", e);
-      }
-    }
-    scheduleNextAutoSync();
-  }, AUTO_SYNC_INTERVAL_MS);
-}
-
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "visible" && !isUserInputActive()) {
-    syncHud();
-  }
-});
-
-window.addEventListener("focus", () => {
-  if (!isUserInputActive()) {
-    syncHud();
-  }
-});
 
 window.addEventListener("DOMContentLoaded", () => {
   syncHud();
-  updatePomoDisplay();
-  scheduleNextAutoSync();
+  if (typeof updatePomoDisplay === "function") {
+    updatePomoDisplay();
+  }
 });
