@@ -626,6 +626,15 @@ async function syncHud() {
   }
 }
 
+function toggleInboxDrawer() {
+  const drawer = document.getElementById("inboxDrawer");
+  const chevron = document.getElementById("inboxToggleChevron");
+  if (!drawer) return;
+  const isHidden = drawer.style.display === "none";
+  drawer.style.display = isHidden ? "block" : "none";
+  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
+}
+
 function toggleTbdDrawer() {
   const drawer = document.getElementById("tbdDrawer");
   const chevron = document.getElementById("tbdToggleChevron");
