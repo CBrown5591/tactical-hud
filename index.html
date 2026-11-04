@@ -128,6 +128,7 @@
       <button class="pill" data-cap-energy="yellow" onclick="selectCaptureEnergy('yellow')">🟡 Medium Cruise</button>
       <button class="pill" data-cap-energy="green" onclick="selectCaptureEnergy('green')">🟢 Low Battery</button>
       <button type="button" class="pill" id="macroSpikeBtn" onclick="toggleQuickCaptureSpikeMacro()" style="border-color:#eab308; color:#fde047; font-weight:700;">🔬 Spike</button>
+      <button type="button" class="pill" id="capTargetTbdBtn" onclick="toggleCaptureTargetTbd()">💡 Route to TBD</button>
     </div>
     <!-- Due Date Routing Pills -->
     <div class="pill-row" style="margin-top:6px; align-items:center;">
@@ -166,6 +167,22 @@
 
   <!-- MAIN HUD PANELS -->
   <main class="hud-grid">
+    <!-- TBD / PARKING LOT COLLAPSIBLE SECTION -->
+  <section class="panel" style="margin-top: 14px;">
+    <div class="section-label" style="cursor: pointer; user-select: none;" onclick="toggleTbdDrawer()">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span id="tbdToggleChevron">▶</span>
+        <span>💡 TBD // DISCUSSION & PARKING LOT</span>
+      </div>
+      <span class="wip-counter" id="tbdCount">0</span>
+    </div>
+    <div id="tbdDrawer" style="display: none; margin-top: 10px;">
+      <div class="task-list" id="tbdList">
+        <div class="empty-state">No parked thoughts or discussion items.</div>
+      </div>
+    </div>
+  </section>
+    
     <!-- TODAY'S LOAD -->
     <section class="panel">
       <div class="section-label">
@@ -185,6 +202,7 @@
     </section>
   </main>
 
+  
   <!-- CARD DETAIL / COMMENTS & DEPENDENCIES MODAL -->
   <div class="modal-backdrop" id="cardNoteModal">
     <div class="modal">
