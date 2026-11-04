@@ -25,6 +25,8 @@ var state = window.state || {
   todayCards: [],
   inboxCards: [],
   allLoadedCards: [],
+  tbdCards = [];
+  captureTargetTbd = false;
   calendarTelemetry: { bookedHours: 0, eventCount: 0, nextEvent: null },
   energyQuotas: { red: 1, yellow: 1, green: 2, total: 4, label: "1 HEAVY / 1 MED / 2 LIGHT" }
 };
@@ -475,6 +477,7 @@ async function syncHud() {
     state.todayCards = [];
     state.inboxCards = [];
     state.allLoadedCards = [];
+    state.tbdCards = [];
     state.saveStateCardId = null;
     state.scoreLedgerCardId = null;
 
@@ -580,6 +583,7 @@ async function syncHud() {
 
         if (card.idList === listMap.today) state.todayCards.push(item);
         else if (card.idList === listMap.inbox) state.inboxCards.push(item);
+        else if (card.idList === listMap.tbd) state.tbdCards.push(item);
       });
     });
 
@@ -621,7 +625,57 @@ async function syncHud() {
     document.getElementById("todayList").innerHTML = `<div class="empty-state">API Sync Error. Check ⚙️ Settings.</div>`;
   }
 }
+
+function toggleTbdDrawer() {
+  const drawer = document.getElementById("tbdDrawer");
+  const chevron = document.getElementById("tbdToggleChevron");
+  if (!drawer) return;
+  const isHidden = drawer.style.display === "none";
+  drawer.style.display = isHidden ? "block" : "none";
+  if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
+}
+
+function toggleCaptureTargetTbd() {
+  state.captureTargetTbd = !state.captureTargetTbd;
+  const btn = document.getElementById("capTargetTbdBtn");
+  if (btn) btn.classList.toggle("active", state.captureTargetTbd);
+  const targetLabelEl = document.getElementById("captureTargetLabel");
+  if (targetLabelEl) {
+    targetLabelEl.textContent = state.captureTargetTbd
+      ? `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 💡 TBD`
+      : `Target: ${BOARD_LABELS[state.captureBoard] || "Active Board"} -> 📥 Inbox`;
+  }
+}
+
+function renderTbdCards() {
+  const listEl = document.getElementById("tbdList");
+  const countEl = document.getElementById("tbdCount");
+  if (!listEl) return;
+
+  if (countEl) countEl.textContent = state.tbdCards.length;
+
+  if (state.tbdCards.length === 0) {
+    listEl.innerHTML = `<div class="empty-state">No parked thoughts or discussion items.</div>`;
+    return;
+  }
+
+  listEl.innerHTML = state.tbdCards.map(c => `
+    <div class="task-card" style="border-left: 3px solid #64748b; background: rgba(15, 23, 42, 0.65);">
+      <div class="task-header">
+        <span class="board-badge">${c.boardName}</span>
+        <div class="task-actions">
+          <button class="icon-btn" title="Move to Inbox for Action" onclick="moveCard('${c.id}', '${c.boardKey}', 'inbox')">📥</button>
+          <button class="icon-btn" title="Card Details / Notes" onclick="openNoteModal('${c.id}')">💬</button>
+        </div>
+      </div>
+      <div class="task-title" style="color: #cbd5e1; font-weight: 500;">${escapeHtml(c.name)}</div>
+      ${c.notes ? `<div class="task-notes" style="font-size:0.75rem; color:#94a3b8; margin-top:4px;">${escapeHtml(c.notes)}</div>` : ''}
+    </div>
+  `).join("");
+}
+
 function renderCards() {
+  renderTbdCards();
   const filterFn = c => state.energyFilter === "all" || c.energy === state.energyFilter;
   const todayFiltered = state.todayCards.filter(filterFn);
   const inboxFiltered = state.inboxCards.filter(filterFn);
