@@ -167,18 +167,6 @@
 
   <!-- MAIN HUD PANELS -->
   <main class="hud-grid">
-    
-    <!-- TODAY'S LOAD -->
-    <section class="panel">
-      <div class="section-label">
-        <span id="todaySectionLabel">⚡ TODAY'S LOAD (1 HEAVY / 1 MED / 2 LIGHT)</span>
-        <span class="wip-counter" id="todayCount">0 / 4</span>
-      </div>
-      <div class="task-list" id="todayList"><div class="empty-state">Loading active tasks...</div></div>
-    </section>
-
-<!-- MAIN HUD PANELS -->
-  <main class="hud-grid">
     <!-- LEFT COLUMN: TODAY'S LOAD (PERSISTENT & PRIMARY) -->
     <section class="panel">
       <div class="section-label">
@@ -229,7 +217,7 @@
     <div class="modal">
       <h2 id="noteModalCardTitle" style="font-size:0.95rem; margin-bottom:8px;">💬 Card Details</h2>
       
-            <!-- In-Modal Energy Level Selector -->
+      <!-- In-Modal Energy Level Selector -->
       <div style="background:#090d16; border:1px solid #1e293b; border-radius:8px; padding:10px; margin-bottom:12px;">
         <div class="section-label" style="margin-bottom:6px;"><span>⚡ ENERGY LEVEL</span></div>
         <div class="pill-row" id="modalEnergyPills" style="margin-top:0;">
@@ -417,7 +405,7 @@
     </div>
   </div>
 
-<!-- RETROACTIVE ON-TIME COMPLETION PROMPT MODAL -->
+  <!-- RETROACTIVE ON-TIME COMPLETION PROMPT MODAL -->
   <div class="modal-backdrop" id="retroactiveModal">
     <div class="modal" style="max-width: 440px;">
       <h2 style="font-size:1.05rem; margin-bottom:6px; color:#fde047;">⏳ Task Completed Past Deadline</h2>
@@ -507,7 +495,7 @@
       <div class="field"><label>By The VI Board ID (vi)</label><input id="cfgBoardVi" type="text" /></div>
       <div class="field"><label>Project Hiiii-Power Board ID (lab)</label><input id="cfgBoardLab" type="text" /></div>
       <div class="field"><label>Growth Board ID (growth)</label><input id="cfgBoardGrowth" type="text" /></div>
-            <hr style="border-color:#1e293b; margin:12px 0;" />
+      <hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
         <label style="font-weight:700; color:#38bdf8; margin-bottom:6px; display:block;">⚡ Auto-Label Keywords (Cloud-Synced across all devices)</label>
         <span style="font-size:0.68rem; color:var(--muted); display:block; margin-bottom:8px;">Comma-separated words that automatically trigger energy tags on new or untriaged tasks.</span>
@@ -559,7 +547,7 @@
           </div>
         </div>
       </div>
-<hr style="border-color:#1e293b; margin:12px 0;" />
+      <hr style="border-color:#1e293b; margin:12px 0;" />
       <div class="field">
         <label>Google Calendar Apps Script Webhook URL (Optional)</label>
         <input id="cfgCalendarWebhook" type="text" placeholder="https://script.google.com/macros/s/.../exec" />
@@ -576,7 +564,7 @@
     </div>
   </div>
 
-<!-- 1:1 WARP SWAP MODAL -->
+  <!-- 1:1 WARP SWAP MODAL -->
   <div class="modal-backdrop" id="warpModal">
     <div class="modal" style="max-width: 440px;">
       <h2 style="font-size:1.05rem; margin-bottom:6px; color:#38bdf8;">⇄ 1:1 Warp Swap (Bypass Lane)</h2>
@@ -596,12 +584,11 @@
   </div>
   
   <!-- Modular Architecture -->
-  <!-- Ensure you only have these tags once at the bottom of index.html -->
-  <script src="js/auth.js?v=3.9"></script>
-  <script src="js/pomo.js?v=3.9"></script>
-  <script src="js/score.js?v=3.9"></script>
-  <script src="js/trello.js?v=4.0"></script>
-  <script src="js/dependencies.js?v=3.9"></script>
-  <script src="js/app.js?v=4.0"></script>
+  <script src="js/auth.js?v=4.1"></script>
+  <script src="js/pomo.js?v=4.1"></script>
+  <script src="js/score.js?v=4.1"></script>
+  <script src="js/trello.js?v=4.1"></script>
+  <script src="js/dependencies.js?v=4.1"></script>
+  <script src="js/app.js?v=4.1"></script>
 </body>
 </html>
