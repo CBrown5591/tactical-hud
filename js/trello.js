@@ -33,8 +33,9 @@ async function fetchBoardData(boardKey, boardId) {
     if (name.includes("inbox") || name.includes("triage") || name.includes("incoming") || name.includes("capture")) listMap.inbox = l.id;
     else if (name.includes("today") || name.includes("doing") || name.includes("active") || name.includes("in progress")) listMap.today = l.id;
     else if (name.includes("waiting") || name.includes("blocked") || name.includes("pending") || name.includes("hold")) listMap.waiting = l.id;
-    else if (name.includes("queue") || name.includes("backlog") || name.includes("next") || name.includes("later") || name.includes("ready") || name.includes("to do")) listMap.queue = l.id;
+    else if (name.includes("queue") || name.includes("backlog") || name.includes("next")) listMap.queue = l.id;
     else if (name.includes("done") || name.includes("complete") || name.includes("archive")) listMap.done = l.id;
+    else if (name.includes("tbd") || name.includes("parking") || name.includes("agenda") || name.includes("discuss")) listMap.tbd = l.id;
   });
 
   if (!listMap.inbox && lists.length > 0) listMap.inbox = lists[0].id;
