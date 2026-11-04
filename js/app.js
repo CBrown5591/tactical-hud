@@ -626,11 +626,12 @@ async function syncHud() {
   }
 }
 
+// --- DRAWER TOGGLE HELPERS ---
 function toggleInboxDrawer() {
   const drawer = document.getElementById("inboxDrawer");
   const chevron = document.getElementById("inboxToggleChevron");
   if (!drawer) return;
-  const isHidden = drawer.style.display === "none";
+  const isHidden = window.getComputedStyle(drawer).display === "none";
   drawer.style.display = isHidden ? "block" : "none";
   if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
 }
@@ -639,7 +640,7 @@ function toggleTbdDrawer() {
   const drawer = document.getElementById("tbdDrawer");
   const chevron = document.getElementById("tbdToggleChevron");
   if (!drawer) return;
-  const isHidden = drawer.style.display === "none";
+  const isHidden = window.getComputedStyle(drawer).display === "none";
   drawer.style.display = isHidden ? "block" : "none";
   if (chevron) chevron.textContent = isHidden ? "▼" : "▶";
 }
