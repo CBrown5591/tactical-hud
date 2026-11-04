@@ -881,6 +881,9 @@ async function submitQuickCapture() {
   const targetBoardKey = state.captureBoard;
   const cache = state.boardCache[targetBoardKey];
   if (!cache || !cache.listMap.inbox) return alert("Target Inbox list not loaded.");
+  const targetListKey = state.captureTargetTbd ? 'tbd' : 'inbox';
+  const targetListId = cache && cache.listMap ? cache.listMap[targetListKey] : null;
+  if (!targetListId) return alert(`Target ${targetListKey.toUpperCase()} list not loaded.`);
 
   const isSpikeTask = state.captureIsSpike || name.startsWith("🔬 Spike:") || name.toLowerCase().startsWith("spike:");
 
@@ -909,6 +912,9 @@ async function submitQuickCapture() {
   const blockerId = blockerSelect ? blockerSelect.value : "";
 
   input.value = "";
+  if (state.captureTargetTbd) {
+    toggleCaptureTargetTbd();
+  }
   state.captureCustomDueExplicit = false;
   selectCaptureDue("none");
   selectCaptureRecur("none");
@@ -918,7 +924,11 @@ async function submitQuickCapture() {
   if (blockerSelect) blockerSelect.value = "";
 
   try {
-    const newCard = await trelloFetch(`/cards`, "POST", `&idList=${cache.listMap.inbox}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}${descParam}`);
+    const newCard = await trelloFetch(
+      `/cards`, 
+      "POST", 
+      `&idList=${targetListId}&name=${encodeURIComponent(name)}&pos=bottom${labelParam}${dueParam}${descParam}`
+    );
 
     if (blockerId && newCard && newCard.id) {
       const targetCard = state.allLoadedCards.find(c => c.id === blockerId);
